@@ -1,0 +1,15 @@
+{
+  "name": "neighborly",
+  "version": "0.1.0",
+  "description": "Neighborhood help matching with urgency-aware ranking and trust circles",
+  "type": "module",
+  "scripts": {
+    "start": "node server/index.js",
+    "demo:web": "node server/index.js --demo",
+    "demo": "node src/demo.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

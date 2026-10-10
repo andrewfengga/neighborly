@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#2f6f4f">
+  <title>Neighborly</title>
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <img src="/icon.svg" alt="" width="28" height="28">
+      <div>
+        <div class="brand-name">Neighborly</div>
+        <div class="brand-sub" id="circle-name"></div>
+      </div>
+    </div>
+    <div id="topbar-right"></div>
+  </header>
+  <div id="demo-banner" class="demo-banner" hidden>Demo mode: everything here is sample data, not real pilot results.</div>
+  <main id="app" aria-live="polite"></main>
+  <nav class="tabs" id="tabs" hidden>
+    <a href="#/board" data-tab="board"><span class="tab-ico" aria-hidden="true">◎</span>Board</a>
+    <a href="#/ask" data-tab="ask"><span class="tab-ico" aria-hidden="true">＋</span>Ask</a>
+    <a href="#/mine" data-tab="mine"><span class="tab-ico" aria-hidden="true">☰</span>Mine</a>
+    <a href="#/hoods" data-tab="hoods"><span class="tab-ico" aria-hidden="true">⌂</span>Groups</a>
+    <a href="#/me" data-tab="me"><span class="tab-ico" aria-hidden="true">☺</span>Me</a>
+  </nav>
+  <dialog id="dialog"></dialog>
+  <div id="toast" class="toast" role="status" hidden></div>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+# Render blueprint: free web service. Data is saved to Upstash Redis because
+# Render's free plan wipes the disk on every restart. See DEPLOY.md.
+services:
+  - type: web
+    name: neighborly
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: UPSTASH_REDIS_REST_URL
+        sync: false
+      - key: UPSTASH_REDIS_REST_TOKEN
+        sync: false
