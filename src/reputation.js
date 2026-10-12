@@ -67,6 +67,7 @@ export function reputation(history, now = new Date()) {
 
   for (const [i, event] of history.entries()) {
     if (!OUTCOMES.includes(event.outcome)) throw new Error(`Unknown outcome: ${event.outcome}`);
+    if (event.overturned) continue; // a no-show an organizer removed on appeal
     const w = decayWeight(event.at, now);
     if (event.outcome === "completed" && !counted[i]) {
       uncounted++;

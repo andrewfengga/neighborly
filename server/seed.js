@@ -50,13 +50,17 @@ export function seedDemo(now = new Date()) {
 
   db.people.push(
     person("p_maya", "Maya Patel", SPOT.north, {
-      isMinor: true, guardianContact: "Mom: (555) 010-2233",
+      isMinor: true, guardianName: "Anita Patel (mom)", guardianPhone: "(555) 010-2233",
+      guardianContact: "Anita Patel (mom): (555) 010-2233",
       volunteering: true, skills: ["groceries", "yard_work", "snow_leaves"], slots: ["anytime"],
       history: [done(4), done(11), done(25)],
     }),
     person("p_tom", "Tom Reyes", SPOT.mill, {
       volunteering: true, skills: ["tech_help", "ride", "moving"], slots: ["anytime"], maxDistanceMiles: 5,
-      history: [done(2), done(9), { outcome: "cancelled_late", at: d(-40) }, done(60), done(95)],
+      history: [
+        done(2), done(9), { outcome: "cancelled_late", at: d(-40) }, done(60), done(95),
+        { outcome: "no_show", at: d(-2), requestId: "r_curb", requesterId: "p_chen" },
+      ],
     }),
     person("p_priya", "Priya Shah", SPOT.center, {
       volunteering: true, skills: ["groceries", "ride"], slots: ["weekday_evenings", "weekend_afternoons"],
@@ -108,6 +112,14 @@ export function seedDemo(now = new Date()) {
     req("r_ride", "c_maple", "p_chen", "ride", "Ride to my dentist appointment", t(3 * 24), t(3 * 24 + 4)),
     req("r_shelf", "c_maple", "p_alvarez", "moving", "Help moving a bookshelf to the garage, no rush", t(0), t(14 * 24)),
     req("r_club", "c_youth", "p_tom", "yard_work", "Weed the garden beds at the community center", t(0), t(4 * 24))
+  );
+
+  // Walter reported Tom as a no-show two days ago; Walter then withdrew the request.
+  // Tom can appeal it from Mine → Helping with → Past.
+  db.requests.push(
+    req("r_curb", "c_maple", "p_chen", "moving", "Carry old boxes out to the curb before trash day", d(-2.2), d(-2), {
+      createdAt: d(-3), status: "cancelled", firstAcceptedAt: d(-2.8),
+    })
   );
 
   // Past requests — so the impact screen has something to show in the demo.

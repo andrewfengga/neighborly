@@ -9,7 +9,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-export const emptyDb = () => ({ people: [], circles: [], memberships: [], requests: [], reports: [] });
+export const emptyDb = () => ({ people: [], circles: [], memberships: [], requests: [], reports: [], appeals: [] });
 const withTables = (data) => ({ ...emptyDb(), ...data });
 
 /** Synchronous file store. `initial` replaces whatever is on disk (demo mode). */
@@ -22,8 +22,26 @@ export function openStore(file, initial = null) {
     fs.renameSync(tmp, file); // write-then-rename so a crash never leaves half a file
   };
   if (initial) save();
-  return { db, save, where: file };
+
+  // Photos live next to the database, one file each, never inside it.
+  const dir = path.join(path.dirname(file), "uploads");
+  const blobs = {
+    async put(id, bytes) {
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, `${safeId(id)}.jpg`), bytes);
+    },
+    async get(id) {
+      const f = path.join(dir, `${safeId(id)}.jpg`);
+      return fs.existsSync(f) ? fs.readFileSync(f) : null;
+    },
+  };
+  return { db, save, blobs, where: file };
 }
+
+const safeId = (id) => {
+  if (!/^[\w-]+$/.test(id)) throw new Error("Bad file id");
+  return id;
+};
 
 /** Upstash Redis over its REST API (plain fetch, no package needed). */
 export async function openUpstashStore({ url, token, key = "neighborly:db" }) {
@@ -49,5 +67,13 @@ export async function openUpstashStore({ url, token, key = "neighborly:db" }) {
       .catch((err) => console.error("SAVE FAILED, data may be lost on restart:", err.message));
     return chain;
   };
-  return { db, save, where: "Upstash Redis" };
+  // Photos get their own keys, so the main database stays small and fast.
+  const blobs = {
+    put: (id, bytes) => call(["SET", `neighborly:blob:${id}`, bytes.toString("base64")]),
+    async get(id) {
+      const b64 = await call(["GET", `neighborly:blob:${id}`]);
+      return b64 ? Buffer.from(b64, "base64") : null;
+    },
+  };
+  return { db, save, blobs, where: "Upstash Redis" };
 }

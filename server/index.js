@@ -23,7 +23,7 @@ const DEMO = process.argv.includes("--demo");
 const PORT = Number(process.env.PORT) || 3000;
 const { UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN, DATA_DIR } = process.env;
 
-const { db, save, where } = DEMO
+const { db, save, blobs, where } = DEMO
   ? openStore(path.join(ROOT, "data/demo.json"), seedDemo())
   : UPSTASH_REDIS_REST_URL
     ? await openUpstashStore({ url: UPSTASH_REDIS_REST_URL, token: UPSTASH_REDIS_REST_TOKEN })
@@ -56,6 +56,7 @@ const LIMITS = {
   signup: { max: 10, windowMs: 60 * 60e3 }, // new accounts per hour
   key: { max: 20, windowMs: 10 * 60e3 }, // invite-key tries per 10 minutes
   write: { max: 120, windowMs: 60e3 }, // any change per minute
+  upload: { max: 10, windowMs: 60 * 60e3 }, // appeals with photos per hour
 };
 const hits = new Map();
 
@@ -79,6 +80,7 @@ function bucketsFor(method, pathname) {
   if (method === "GET" && pathname !== "/api/circles/preview") return [];
   const buckets = method === "GET" ? [] : ["write"];
   if (pathname === "/api/signup") buckets.push("signup");
+  if (pathname === "/api/appeals") buckets.push("upload");
   if (pathname === "/api/circles/join" || pathname === "/api/circles/preview") buckets.push("key");
   return buckets;
 }
@@ -104,12 +106,12 @@ function serveStatic(req, res) {
 
 // ---------- API ----------
 
-function readBody(req) {
+function readBody(req, maxBytes = 20_000) {
   return new Promise((resolve, reject) => {
     let data = "";
     req.on("data", (chunk) => {
       data += chunk;
-      if (data.length > 20_000) reject(new api.ApiError("Request too large", 413));
+      if (data.length > maxBytes) reject(new api.ApiError("That's too large to upload", 413));
     });
     req.on("end", () => {
       try {
@@ -159,6 +161,11 @@ const routes = [
   route("POST /api/requests/:id/:action", (c) => api.act(db, c.me, c.params[0], c.params[1], c.now), true, true),
   route("POST /api/reports", (c) => api.report(db, c.me, c.body, c.now), true, true),
 
+  // appeals of no-show reports
+  route("POST /api/appeals", (c) => api.fileAppeal(db, blobs, c.me, c.body, c.now), true, true),
+  route("GET /api/appeals/:id/images/:n", (c) => api.appealImage(db, blobs, c.me, c.params[0], c.params[1])),
+  route("POST /api/appeals/:id/decide", (c) => api.decideAppeal(db, c.me, c.params[0], c.body, c.now), true, true),
+
   // Demo mode only: the user switcher for recording the video.
   route("GET /api/demo/people", () => {
     if (!DEMO) throw new api.ApiError("Not found", 404);
@@ -191,8 +198,9 @@ async function handleApi(req, res) {
         ctx.me = api.personByToken(db, token);
         if (!ctx.me) throw new api.ApiError("Please sign in again", 401);
       }
-      if (method !== "GET") ctx.body = await readBody(req);
-      const result = handler(ctx);
+      // Appeals can carry up to 3 photos; everything else is small.
+      if (method !== "GET") ctx.body = await readBody(req, url.pathname === "/api/appeals" ? 3_000_000 : 20_000);
+      const result = await handler(ctx);
       if (writes) save();
       return send(200, result);
     }

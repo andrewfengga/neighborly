@@ -14,7 +14,7 @@ Requires Node 20+. No other dependencies.
 ```bash
 npm run demo:web     # sample data + a user switcher, resets on every start
 npm start            # real pilot data, saved in data/db.json
-npm test             # 51 tests
+npm test             # 68 tests
 ```
 
 Open http://localhost:3000. In demo mode, pick a person on the first screen, or switch
@@ -64,6 +64,7 @@ under-18 safety rule").
 | Exact addresses | Locations are rounded to about half a mile **on the phone, before they're sent**, and the board shows only a distance. Exact details are shown **only to the one volunteer who accepts**. |
 | Fake reputation | Only the *requester* can confirm a task was completed or report a no-show. |
 | Flaky volunteers | Late cancellations (under 12 hours' notice) and no-shows go on the record. A no-show reopens the request. |
+| False no-show reports | A volunteer can appeal within 14 days with a statement and up to 3 photos (location data is stripped on the phone; only organizers see them). Organizers see how often the requester reports no-shows, can't rule on a case they're part of, and a removed no-show stops counting against the score. The penalty stays while an appeal is pending, so appealing everything doesn't dodge penalties. |
 | Bad actors | Anyone can privately report a concern to the organizers. An organizer can remove a member, which cuts off their access to that neighborhood immediately, releases their tasks there, and blocks them from rejoining. |
 | Out-of-scope care | Medical and personal-care requests are blocked. The app says it's for everyday help. |
 

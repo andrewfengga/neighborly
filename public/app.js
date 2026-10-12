@@ -113,6 +113,31 @@ function locationButton(buttonSel, inputSel, statusSel) {
   };
 }
 
+/**
+ * Re-draws a photo onto a canvas and saves it as a JPEG. That strips EXIF data
+ * (including GPS location, which could reveal where someone lives) and shrinks
+ * it to at most 1600px and about 600 KB, before it ever leaves the phone.
+ */
+async function compressPhoto(file) {
+  if (!file.type.startsWith("image/")) throw new Error(`${file.name} isn't a photo`);
+  let bitmap;
+  try {
+    bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
+  } catch {
+    throw new Error(`Couldn't open ${file.name}. Try a screenshot or a JPEG.`);
+  }
+  const scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(bitmap.width * scale);
+  canvas.height = Math.round(bitmap.height * scale);
+  canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  for (const quality of [0.82, 0.7, 0.6, 0.5, 0.4]) {
+    const dataUrl = canvas.toDataURL("image/jpeg", quality);
+    if (dataUrl.length * 0.75 < 600 * 1024) return dataUrl;
+  }
+  throw new Error(`${file.name} is too large even after shrinking`);
+}
+
 const inviteLink = (key) => `${location.origin}/#/join/${encodeURIComponent(key)}`;
 
 async function shareInvite(circle) {
@@ -296,8 +321,13 @@ async function renderWelcome() {
         <p class="muted" id="loc-status" style="margin:6px 0 16px">Used only to show how far requests are. It's rounded to about half a mile on your phone before it's sent.</p>
       </div>
       <label class="check"><input type="checkbox" name="isMinor" id="minor"><span>I'm under 18</span></label>
-      <label class="field" id="guardian" hidden><span>Parent or guardian contact (required)</span>
-        <input type="text" name="guardianContact" maxlength="80" placeholder="Name and phone number"></label>
+      <div id="guardian" class="guardian-box" hidden>
+        <p class="small" style="margin:0 0 10px">Under 18? We need a parent or guardian. Organizers can see this, and so can neighbors you help.</p>
+        <label class="field"><span>Parent/guardian name</span>
+          <input type="text" name="guardianName" maxlength="60" autocomplete="off" placeholder="e.g. Anita Patel"></label>
+        <label class="field" style="margin-bottom:0"><span>Parent/guardian phone</span>
+          <input type="tel" name="guardianPhone" maxlength="25" autocomplete="off" placeholder="(555) 123-4567"></label>
+      </div>
       <label class="check"><input type="checkbox" required><span class="small">I understand Neighborly is for everyday practical help, not medical or personal care, and I'll use good judgment when meeting people.</span></label>
       <button class="btn primary block">Get started</button>
     </form>
@@ -312,7 +342,7 @@ async function renderWelcome() {
   locationButton("#loc-btn", "#loc-val", "#loc-status");
   $("#minor").onchange = (e) => {
     $("#guardian").hidden = !e.target.checked;
-    $("#guardian input").required = e.target.checked;
+    document.querySelectorAll("#guardian input").forEach((i) => (i.required = e.target.checked));
   };
   $("#signup-form").onsubmit = async (e) => {
     e.preventDefault();
@@ -324,7 +354,8 @@ async function renderWelcome() {
           name: f.get("name"),
           location: f.get("location") ? JSON.parse(f.get("location")) : null,
           isMinor: f.get("isMinor") === "on",
-          guardianContact: f.get("guardianContact"),
+          guardianName: f.get("guardianName"),
+          guardianPhone: f.get("guardianPhone"),
         },
       });
       token = res.token;
@@ -387,6 +418,7 @@ async function hoodList() {
           ${c.status === "pending" ? `<span class="pill warn">Waiting for an organizer to approve you</span>` : ""}
           ${c.role === "organizer" ? `<span class="pill brand">Organizer</span>` : ""}
           ${c.pending ? `<span class="pill bad">${c.pending} asking to join</span>` : ""}
+          ${c.appeals ? `<span class="pill bad">${c.appeals} appeal${c.appeals === 1 ? "" : "s"} to review</span>` : ""}
         </div>
       </a>`).join("")}` : ""}`;
 }
@@ -614,10 +646,47 @@ function impactSection(m, c) {
     </div>` : ""}`;
 }
 
+const APPEAL_PILL = { pending: ["Needs a decision", "bad"], overturned: ["No-show removed", "good"], upheld: ["No-show kept", ""] };
+
+/** One appeal, with the context an organizer needs to decide fairly. */
+function appealCard(a, circleId) {
+  const [label, tone] = APPEAL_PILL[a.status];
+  const v = a.volunteer;
+  const rq = a.requester;
+  const reportRate = rq.requests ? Math.round((rq.noShowsReported / rq.requests) * 100) : 0;
+  return `
+    <article class="card fadein ${a.status === "pending" ? "card-bad" : ""}">
+      <div class="row spread"><b>${esc(v.name)} appeals a no-show</b><span class="pill ${tone}">${label}</span></div>
+      ${a.request ? `<div class="muted" style="margin-top:4px">"${esc(a.request.description)}" · ${fmtWindow(a.request.window)}</div>` : ""}
+      <blockquote class="statement">${esc(a.statement)}</blockquote>
+      ${a.imageCount ? `<div class="row">${Array.from({ length: a.imageCount }, (_, n) =>
+        `<button class="btn small" data-action="appeal-photo" data-id="${esc(a.id)}" data-n="${n}">📷 Photo ${n + 1}</button>`).join("")}</div>` : ""}
+      <div class="appeal-context">
+        <div><b>${esc(v.name)}</b>${v.isMinor ? ` <span class="pill warn">Under 18</span>` : ""}<br>
+          <span class="muted">${repLine(v.reputation)} · ${v.noShows} no-show${v.noShows === 1 ? "" : "s"} total</span></div>
+        <div><b>Reported by ${esc(rq.name)}</b><br>
+          <span class="muted">has reported ${rq.noShowsReported} no-show${rq.noShowsReported === 1 ? "" : "s"} across ${rq.requests} request${rq.requests === 1 ? "" : "s"}${reportRate >= 50 && rq.noShowsReported >= 2 ? ` <span class="pill warn">reports a lot</span>` : ""}</span></div>
+      </div>
+      ${a.status === "pending" ? a.conflict
+        ? `<p class="small muted" style="margin:10px 0 0">You're part of this case, so another organizer has to decide it.</p>`
+        : `<label class="field" style="margin:12px 0 0"><span>Note to ${esc(v.name.split(" ")[0])} (optional)</span>
+             <input type="text" id="appeal-note-${esc(a.id)}" maxlength="300" placeholder="e.g. Talked to both of you. Thanks for the photo."></label>
+           <div class="actions">
+             <button class="btn primary" data-action="decide-appeal" data-decision="overturn" data-id="${esc(a.id)}" data-circle="${esc(circleId)}">Remove the no-show</button>
+             <button class="btn" data-action="decide-appeal" data-decision="uphold" data-id="${esc(a.id)}" data-circle="${esc(circleId)}">Keep it</button>
+           </div>`
+        : a.decisionNote ? `<p class="small muted" style="margin:10px 0 0">Your note: ${esc(a.decisionNote)}</p>` : ""}
+    </article>`;
+}
+
 function organizerSection(c) {
   const open = c.reports.filter((r) => !r.resolved);
+  const pendingAppeals = c.appeals.filter((a) => a.status === "pending").length;
   return `
     <h2>Organizer tools</h2>
+    <h3 class="subhead">No-show appeals <span class="pill ${pendingAppeals ? "bad" : "good"}">${pendingAppeals} to review</span></h3>
+    ${c.appeals.length ? c.appeals.map((a) => appealCard(a, c.id)).join("")
+      : `<p class="muted">Volunteers who were reported as a no-show can appeal with a statement and photos. Appeals show up here.</p>`}
     <div class="card">
       <div class="row spread"><h3 style="margin:0">Safety reports</h3><span class="pill ${open.length ? "bad" : "good"}">${open.length} open</span></div>
       ${c.reports.length ? c.reports.map((r) => `
@@ -856,6 +925,40 @@ function ask() {
 
 // ---------- mine ----------
 
+// Two tabs: requests you asked for, and tasks you're helping with. Each has
+// Active and Past. #/mine/requests and #/mine/helping link straight to a tab.
+async function mine(tab) {
+  const { posted, accepted } = await api("/api/mine");
+  if (tab !== "requests" && tab !== "helping") {
+    tab = me.person.volunteering || (accepted.length && !posted.length) ? "helping" : "requests";
+  }
+  const requestActive = (r) => r.status === "open" || r.status === "accepted";
+  const helpActive = (r) => r.myStatus === "active";
+  const needsAppeal = accepted.filter((r) => r.canAppeal).length;
+  const activeRequests = posted.filter(requestActive).length;
+  const activeHelping = accepted.filter(helpActive).length;
+
+  const section = (title, items, render, empty) => `
+    <h2>${title}</h2>
+    ${items.length ? items.map(render).join("") : `<p class="muted">${empty}</p>`}`;
+
+  const body = tab === "requests"
+    ? section("Active", posted.filter(requestActive), requestCard, `No open requests. <a href="#/ask">Ask for help</a>.`)
+      + section("Past", posted.filter((r) => !requestActive(r)), requestCard, "Finished and withdrawn requests show up here.")
+    : section("Active", accepted.filter(helpActive), taskCard, `Nothing right now. Pick something from your <a href="#/board">board</a>.`)
+      + section("Past", accepted.filter((r) => !helpActive(r)), taskCard, "Tasks you've finished show up here.");
+
+  app.innerHTML = `
+    <h1>Mine</h1>
+    <div class="segmented" role="tablist">
+      <a role="tab" href="#/mine/requests" class="${tab === "requests" ? "on" : ""}" aria-selected="${tab === "requests"}">
+        My requests${activeRequests ? ` <span class="count">${activeRequests}</span>` : ""}</a>
+      <a role="tab" href="#/mine/helping" class="${tab === "helping" ? "on" : ""}" aria-selected="${tab === "helping"}">
+        Helping with${needsAppeal ? ` <span class="count bad" title="Something you can appeal">!</span>` : activeHelping ? ` <span class="count">${activeHelping}</span>` : ""}</a>
+    </div>
+    ${body}`;
+}
+
 const STATUS = {
   open: ["Waiting for a volunteer", "warn"],
   accepted: ["Someone's helping", "good"],
@@ -863,37 +966,13 @@ const STATUS = {
   cancelled: ["Withdrawn", ""],
 };
 
-async function mine() {
-  const { posted, accepted } = await api("/api/mine");
-  const active = (r) => r.status === "open" || r.status === "accepted";
-
-  // Volunteers see what they're helping with first; everyone else, their own requests.
-  const helping = accepted.filter(active).map(taskCard).join("");
-  const helpingSection = helping || me.person.volunteering ? `
-    <h2>Helping with</h2>
-    ${helping || `<p class="muted">Nothing yet. Pick something from your <a href="#/board">board</a>.</p>`}` : "";
-  const requestsSection = `
-    <h2>Your requests</h2>
-    ${posted.filter(active).map(requestCard).join("") || `<p class="muted">No open requests. <a href="#/ask">Ask for help</a>.</p>`}`;
-
-  app.innerHTML = `
-    <h1>Mine</h1>
-    ${me.person.volunteering ? helpingSection + requestsSection : requestsSection + helpingSection}
-    ${[...accepted, ...posted].some((r) => !active(r)) ? `
-      <details style="margin-top:20px"><summary class="muted" style="cursor:pointer">Past</summary>
-        <div style="margin-top:10px">
-          ${accepted.filter((r) => !active(r)).map(taskCard).join("")}
-          ${posted.filter((r) => !active(r)).map(requestCard).join("")}
-        </div></details>` : ""}`;
-}
-
 function requestCard(r) {
   const [label, tone] = STATUS[r.status];
   const v = r.volunteer;
   return `
     <article class="card fadein">
       <div class="row spread"><span class="pill brand">${esc(r.taskLabel)}</span>
-        <span class="pill ${tone}">${r.status === "accepted" && v ? `${esc(v.name)} is helping` : label}</span></div>
+        <span class="pill ${tone}">${r.status === "accepted" && v ? `${esc(v.name)} is helping` : r.status === "completed" && v ? `Done by ${esc(v.name)}` : label}</span></div>
       <div class="req-title">${esc(r.description)}</div>
       <div class="muted">${r.onBehalfOf ? `For ${esc(r.onBehalfOf)} · ` : ""}${fmtWindow(r.window)} · ${esc(r.circleName)} · posted ${ago(r.createdAt)}</div>
       ${r.status === "accepted" && v ? `
@@ -916,14 +995,29 @@ function requestCard(r) {
     </article>`;
 }
 
+const HELP_STATUS = {
+  active: ["You're helping", "good"],
+  completed: ["✓ Done", "good"],
+  no_show: ["Reported as a no-show", "bad"],
+  no_show_overturned: ["No-show removed on appeal", "good"],
+  cancelled_late: ["You cancelled late", "warn"],
+};
+
+const APPEAL_STATUS = {
+  pending: ["Appeal sent. Waiting for an organizer to review it.", "warn"],
+  overturned: ["Appeal accepted: the no-show was removed from your record.", "good"],
+  upheld: ["Appeal reviewed: the organizer kept the no-show.", "bad"],
+};
+
 function taskCard(r) {
-  const [label, tone] = r.status === "accepted" ? ["You're helping", "good"] : STATUS[r.status];
+  const [label, tone] = HELP_STATUS[r.myStatus];
+  const daysLeft = r.canAppeal ? Math.max(1, Math.ceil(14 - (Date.now() - new Date(r.eventAt)) / 864e5)) : 0;
   return `
-    <article class="card fadein">
+    <article class="card fadein ${r.myStatus === "no_show" ? "card-bad" : ""}">
       <div class="row spread"><span class="pill brand">${esc(r.taskLabel)}</span><span class="pill ${tone}">${label}</span></div>
       <div class="req-title">${esc(r.description)}</div>
       <div class="muted">For ${esc(r.onBehalfOf || r.requesterName)}${r.onBehalfOf ? ` (posted by ${esc(r.requesterName)})` : ""} · ${fmtWindow(r.window)} · ${esc(r.circleName)}</div>
-      ${r.status === "accepted" ? `
+      ${r.myStatus === "active" ? `
         <div class="notice lock" style="margin:12px 0 0">🔒 <b>Shared only with you:</b>
           ${r.contactPhone ? `<div>📞 <a href="tel:${esc(r.contactPhone)}">${esc(r.contactPhone)}</a></div>` : ""}
           ${r.privateDetails ? `<div>${esc(r.privateDetails)}</div>` : ""}
@@ -934,6 +1028,19 @@ function taskCard(r) {
           <button class="btn small" data-action="report" data-id="${esc(r.id)}">Report a concern</button>
         </div>
         <p class="muted" style="margin:10px 0 0">${esc(r.requesterName)} will mark it done after you help, which builds your reliability.</p>` : ""}
+      ${r.myStatus === "no_show" && !r.appeal ? `
+        <p class="small" style="margin:10px 0 0;color:var(--bad-ink)">${esc(r.requesterName)} said you didn't come (${ago(r.eventAt)}). That costs 15 points on your reliability.</p>
+        ${r.canAppeal ? `
+          <div class="actions">
+            <button class="btn danger-solid" data-action="appeal" data-id="${esc(r.id)}" data-desc="${esc(r.description)}" data-name="${esc(r.requesterName)}">I was there: appeal</button>
+          </div>
+          <p class="muted" style="margin:8px 0 0">${daysLeft} day${daysLeft === 1 ? "" : "s"} left to appeal.</p>`
+          : `<p class="muted" style="margin:8px 0 0">The 14-day appeal window has closed.</p>`}` : ""}
+      ${r.appeal ? `
+        <div class="notice ${APPEAL_STATUS[r.appeal.status][1]} small" style="margin:12px 0 0">
+          ${APPEAL_STATUS[r.appeal.status][0]}
+          ${r.appeal.decisionNote ? `<div style="margin-top:4px"><b>Organizer's note:</b> ${esc(r.appeal.decisionNote)}</div>` : ""}
+        </div>` : ""}
     </article>`;
 }
 
@@ -981,6 +1088,10 @@ async function profile() {
         <ul class="events">
           ${events.map((e) => {
             const good = e.outcome === "completed";
+            if (e.overturned) {
+              return `<li><span><s>${outcomeText[e.outcome]}</s> <span class="muted">${ago(e.at)}</span></span>
+                <span class="small" style="grid-column:span 2;text-align:right;color:var(--good-ink)">removed on appeal</span></li>`;
+            }
             if (good && !e.counted) {
               return `<li><span>${outcomeText[e.outcome]} <span class="muted">${ago(e.at)}</span></span>
                 <span class="small muted" style="grid-column:span 2;text-align:right">doesn't count: more than ${SAME_NEIGHBOR.max} for the same neighbor in ${SAME_NEIGHBOR.days} days</span></li>`;
@@ -1081,7 +1192,7 @@ const actions = {
   async complete(el) {
     await api(`/api/requests/${el.dataset.id}/complete`, { method: "POST" });
     toast(`Marked done. Thanks for letting ${el.dataset.name} know it counted!`);
-    await mine();
+    await route();
   },
   async noshow(el) {
     const ok = await confirmDialog(`Did ${el.dataset.name} not come?`,
@@ -1089,7 +1200,7 @@ const actions = {
     if (!ok) return;
     await api(`/api/requests/${el.dataset.id}/noshow`, { method: "POST" });
     toast("Reported. Your request is open again.");
-    await mine();
+    await route();
   },
   async cancel(el) {
     const hours = (new Date(el.dataset.start) - Date.now()) / 36e5;
@@ -1101,12 +1212,12 @@ const actions = {
     if (!ok) return;
     await api(`/api/requests/${el.dataset.id}/cancel`, { method: "POST" });
     toast("Released back to the board.");
-    await mine();
+    await route();
   },
   async withdraw(el) {
     if (!(await confirmDialog("Withdraw this request?", "Volunteers will no longer see it.", "Withdraw"))) return;
     await api(`/api/requests/${el.dataset.id}/withdraw`, { method: "POST" });
-    await mine();
+    await route();
   },
   report(el) {
     openDialog(`
@@ -1144,6 +1255,76 @@ const actions = {
     }
     await navigator.clipboard.writeText(text);
     toast("Copied. Paste it in your group chat.");
+  },
+  appeal(el) {
+    const photos = [];
+    openDialog(`
+      <h3>Appeal this no-show</h3>
+      <p class="small">${esc(el.dataset.name)} reported that you didn't come for "${esc(el.dataset.desc)}".
+        Tell the organizer what happened. They'll decide, and if they agree, the 15-point penalty is removed.</p>
+      <form>
+        <label class="field"><span>What happened?</span>
+          <textarea name="statement" maxlength="1000" minlength="20" required
+            placeholder="e.g. I got there at 10:05, knocked and rang twice, and texted the number they gave. I waited 15 minutes."></textarea></label>
+        <div class="field"><span class="label">Photos (optional, up to 3)</span>
+          <label class="btn small" style="cursor:pointer">📷 Add photos
+            <input type="file" accept="image/*" multiple id="appeal-files" hidden></label>
+          <div class="appeal-thumbs" id="appeal-thumbs"></div>
+          <p class="muted" style="margin:6px 0 0">e.g. a photo at the door or a screenshot of your texts. Location data is removed from photos before upload.
+            Only this neighborhood's organizers will see them.</p>
+        </div>
+        <div class="actions"><button class="btn primary">Send appeal</button><button class="btn" type="button" data-close>Cancel</button></div>
+      </form>`,
+      async (f) => {
+        await api("/api/appeals", { method: "POST", body: { requestId: el.dataset.id, statement: f.get("statement"), images: photos } });
+        toast("Appeal sent to the organizers.");
+        await route();
+      });
+
+    const thumbs = $("#appeal-thumbs");
+    const draw = () => {
+      thumbs.innerHTML = photos.map((src, i) => `
+        <span class="thumb"><img src="${src}" alt="Photo ${i + 1}">
+          <button type="button" aria-label="Remove photo ${i + 1}" data-remove="${i}">×</button></span>`).join("");
+    };
+    thumbs.onclick = (e) => {
+      const i = e.target.closest("[data-remove]")?.dataset.remove;
+      if (i !== undefined) { photos.splice(Number(i), 1); draw(); }
+    };
+    $("#appeal-files").onchange = async (e) => {
+      for (const file of [...e.target.files]) {
+        if (photos.length >= 3) { toast("Up to 3 photos", true); break; }
+        try {
+          photos.push(await compressPhoto(file));
+        } catch (err) {
+          toast(err.message, true);
+        }
+      }
+      e.target.value = "";
+      draw();
+    };
+  },
+  async "appeal-photo"(el) {
+    const { dataUrl } = await api(`/api/appeals/${el.dataset.id}/images/${el.dataset.n}`);
+    const dialog = $("#dialog");
+    dialog.innerHTML = `<img src="${dataUrl}" alt="Appeal photo" style="width:100%;border-radius:10px;display:block">
+      <div class="actions"><button class="btn" data-close>Close</button></div>`;
+    dialog.showModal();
+    $("[data-close]", dialog).onclick = () => dialog.close();
+  },
+  async "decide-appeal"(el) {
+    const { id, decision, circle } = el.dataset;
+    const note = $(`#appeal-note-${id}`)?.value ?? "";
+    const ok = await confirmDialog(
+      decision === "overturn" ? "Remove this no-show?" : "Keep this no-show?",
+      decision === "overturn"
+        ? "The 15-point penalty comes off their reliability score right away."
+        : "The penalty stays. They'll see your note, if you wrote one.",
+      decision === "overturn" ? "Remove it" : "Keep it");
+    if (!ok) return;
+    await api(`/api/appeals/${id}/decide`, { method: "POST", body: { decision, note } });
+    toast(decision === "overturn" ? "No-show removed." : "No-show kept.");
+    await hoodDetail(circle);
   },
   async "share-invite"(el) {
     await shareInvite({ name: el.dataset.name, inviteKey: el.dataset.key });

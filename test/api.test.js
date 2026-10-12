@@ -227,3 +227,85 @@ test("bad phone numbers are refused", () => {
   const { db, rosa } = fresh();
   assert.throws(() => api.updateProfile(db, rosa, { phone: "call me maybe" }), /phone number/);
 });
+
+// ---------- appeals ----------
+
+const memoryBlobs = () => {
+  const m = new Map();
+  return { put: async (id, b) => void m.set(id, b), get: async (id) => m.get(id) ?? null, size: () => m.size };
+};
+// Smallest thing that looks like a JPEG to the server (starts with FF D8 FF).
+const fakeJpeg = `data:image/jpeg;base64,${Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]).toString("base64")}`;
+const statement = "I was there at 10am, knocked twice and texted, waited 15 minutes.";
+
+test("a reported no-show stays on the volunteer's Mine page, ready to appeal", () => {
+  const { db, tom } = fresh();
+  const item = api.mine(db, tom, now).accepted.find((r) => r.id === "r_curb");
+  assert.equal(item.myStatus, "no_show");
+  assert.equal(item.canAppeal, true);
+});
+
+test("appeal → organizer removes the no-show → penalty disappears", async () => {
+  const { db, tom, priya } = fresh();
+  const blobs = memoryBlobs();
+  const before = api.me(db, tom, {}, now).reputation.score;
+
+  const { id } = await api.fileAppeal(db, blobs, tom, { requestId: "r_curb", statement, images: [fakeJpeg] }, now);
+  assert.equal(blobs.size(), 1);
+  assert.equal(api.mine(db, tom, now).accepted.find((r) => r.id === "r_curb").appeal.status, "pending");
+  assert.equal(api.me(db, tom, {}, now).reputation.score, before, "penalty stays while pending");
+
+  const seen = api.circleDetail(db, priya, "c_maple", now).appeals[0];
+  assert.equal(seen.requester.noShowsReported, 1);
+  api.decideAppeal(db, priya, id, { decision: "overturn", note: "Thanks for the photo" }, now);
+
+  assert.ok(api.me(db, tom, {}, now).reputation.score > before + 10);
+  const after = api.mine(db, tom, now).accepted.find((r) => r.id === "r_curb");
+  assert.equal(after.myStatus, "no_show_overturned");
+  assert.equal(after.appeal.decisionNote, "Thanks for the photo");
+});
+
+test("appeal rules: one per no-show, real statement, JPEG photos only, max 3", async () => {
+  const { db, tom } = fresh();
+  const blobs = memoryBlobs();
+  await assert.rejects(api.fileAppeal(db, blobs, tom, { requestId: "r_curb", statement: "I was there" }, now), /sentence/);
+  await assert.rejects(api.fileAppeal(db, blobs, tom, { requestId: "r_curb", statement, images: ["data:image/png;base64,AAAA"] }, now), /JPEG/);
+  await assert.rejects(api.fileAppeal(db, blobs, tom, { requestId: "r_curb", statement, images: [fakeJpeg, fakeJpeg, fakeJpeg, fakeJpeg] }, now), /up to 3/);
+  assert.equal(blobs.size(), 0, "nothing stored when an appeal is refused");
+  await api.fileAppeal(db, blobs, tom, { requestId: "r_curb", statement }, now);
+  await assert.rejects(api.fileAppeal(db, blobs, tom, { requestId: "r_curb", statement }, now), /already/);
+});
+
+test("you can only appeal your own no-show, within 14 days", async () => {
+  const { db, tom, maya } = fresh();
+  await assert.rejects(api.fileAppeal(db, memoryBlobs(), maya, { requestId: "r_curb", statement }, now), /no no-show/);
+  const later = new Date(now.getTime() + 15 * 864e5);
+  await assert.rejects(api.fileAppeal(db, memoryBlobs(), tom, { requestId: "r_curb", statement }, later), /14 days/);
+});
+
+test("appeal photos: only the volunteer and that neighborhood's organizers can see them", async () => {
+  const { db, tom, priya, maya } = fresh();
+  const blobs = memoryBlobs();
+  const { id } = await api.fileAppeal(db, blobs, tom, { requestId: "r_curb", statement, images: [fakeJpeg] }, now);
+  assert.match((await api.appealImage(db, blobs, priya, id, 0)).dataUrl, /^data:image\/jpeg;base64,/);
+  assert.ok(await api.appealImage(db, blobs, tom, id, 0));
+  await assert.rejects(api.appealImage(db, blobs, maya, id, 0), /not found/);
+});
+
+test("organizers can't decide a case they're part of, and members can't decide at all", async () => {
+  const { db, tom, priya } = fresh();
+  const { id } = await api.fileAppeal(db, memoryBlobs(), tom, { requestId: "r_curb", statement }, now);
+  assert.throws(() => api.decideAppeal(db, tom, id, { decision: "overturn" }, now), /organizers/);
+  // Make the requester (Walter) an organizer: he still can't rule on his own report.
+  const walter = db.people.find((p) => p.id === "p_chen");
+  api.makeOrganizer(db, priya, "c_maple", walter.id);
+  assert.throws(() => api.decideAppeal(db, walter, id, { decision: "uphold" }, now), /part of this case/);
+});
+
+test("sign-up for a minor needs a guardian name AND a real phone number", () => {
+  const { db } = fresh();
+  assert.throws(() => api.signup(db, { name: "A", isMinor: true, guardianName: "Mom" }, now), /guardian/);
+  assert.throws(() => api.signup(db, { name: "A", isMinor: true, guardianName: "Mom", guardianPhone: "nope" }, now), /phone number/);
+  const { token } = api.signup(db, { name: "A", isMinor: true, guardianName: "Dana Lee", guardianPhone: "(555) 444-1212" }, now);
+  assert.equal(api.personByToken(db, token).guardianContact, "Dana Lee: (555) 444-1212");
+});

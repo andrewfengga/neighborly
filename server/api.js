@@ -26,6 +26,9 @@ const MAX_OPEN_REQUESTS = 5;
 const MAX_DAYS_AHEAD = 30;
 const MAX_CIRCLES_CREATED = 3;
 const MAX_PENDING_JOINS = 5;
+const APPEAL_WINDOW_DAYS = 14;
+const MAX_APPEAL_IMAGES = 3;
+const MAX_IMAGE_BYTES = 700 * 1024;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export class ApiError extends Error {
@@ -200,15 +203,21 @@ export function signup(db, body, now) {
   const name = text(body.name, 40, "Name");
   if (!name) fail("Please enter your name");
   const isMinor = Boolean(body.isMinor);
-  const guardianContact = text(body.guardianContact, 80, "Guardian contact");
-  if (isMinor && !guardianContact) fail("Members under 18 need a parent or guardian contact");
+  const guardianName = isMinor ? text(body.guardianName, 60, "Parent/guardian name") : "";
+  const guardianPhone = isMinor ? phoneField(body.guardianPhone, "Parent/guardian phone") : "";
+  if (isMinor && (!guardianName || !guardianPhone)) {
+    fail("Members under 18 need a parent or guardian's name and phone number");
+  }
 
   const person = {
     id: makeId("p"),
     token: crypto.randomBytes(24).toString("hex"),
     name,
     isMinor,
-    guardianContact: isMinor ? guardianContact : null,
+    guardianName: guardianName || null,
+    guardianPhone: guardianPhone || null,
+    // One readable line for everywhere the app shows it (organizers, requesters).
+    guardianContact: isMinor ? `${guardianName}: ${guardianPhone}` : null,
     location: cleanLocation(body.location),
     volunteering: false,
     skills: [],
@@ -227,10 +236,10 @@ export function me(db, person, { demo }, now) {
     .filter((m) => m.personId === person.id && (m.status === "active" || m.status === "pending"))
     .map((m) => {
       const c = circleById(db, m.circleId);
-      const pending = m.role === "organizer" && m.status === "active"
-        ? db.memberships.filter((x) => x.circleId === c.id && x.status === "pending").length
-        : 0;
-      return { id: c.id, name: c.name, city: c.city, state: c.state, visibility: c.visibility, role: m.role, status: m.status, pending };
+      const organizer = m.role === "organizer" && m.status === "active";
+      const pending = organizer ? db.memberships.filter((x) => x.circleId === c.id && x.status === "pending").length : 0;
+      const appeals = organizer ? db.appeals.filter((a) => a.circleId === c.id && a.status === "pending").length : 0;
+      return { id: c.id, name: c.name, city: c.city, state: c.state, visibility: c.visibility, role: m.role, status: m.status, pending, appeals };
     });
   return { person: rest, reputation: repOf(person, now), circles, demo };
 }
@@ -407,6 +416,12 @@ export function circleDetail(db, person, circleId, now) {
       .filter((r) => r.circleId === circleId)
       .map((r) => ({ ...r, fromName: personById(db, r.from)?.name ?? "Unknown" }))
       .reverse(),
+    // Pending first, then newest.
+    appeals: db.appeals
+      .filter((a) => a.circleId === circleId)
+      .map((a) => ({ ...appealForOrganizer(db, a, now), conflict: a.volunteerId === person.id || a.requesterId === person.id }))
+      .sort((x, y) => (x.status === "pending") - (y.status === "pending") || new Date(x.createdAt) - new Date(y.createdAt))
+      .reverse(),
   };
 }
 
@@ -560,14 +575,39 @@ export function mine(db, person, now) {
       contactPhone: r.contactPhone ?? "",
       volunteer: r.acceptedBy ? volunteerSummary(db, r.acceptedBy, now) : null,
     }));
-  // Private details only while the task is yours and still active.
-  const accepted = db.requests
-    .filter((r) => r.acceptedBy === person.id)
-    .map((r) => ({
+  // Everything you've helped with or committed to, including tasks where you
+  // were reported as a no-show (the request itself reopened for others, so
+  // your own history is what remembers it).
+  const myEvents = new Map();
+  for (const e of person.history) {
+    if (e.requestId && (!myEvents.has(e.requestId) || new Date(e.at) > new Date(myEvents.get(e.requestId).at))) {
+      myEvents.set(e.requestId, e);
+    }
+  }
+  const accepted = [];
+  for (const r of db.requests) {
+    const event = myEvents.get(r.id);
+    const mineNow = r.acceptedBy === person.id;
+    let myStatus = null;
+    if (mineNow && r.status === "accepted") myStatus = "active";
+    else if (event?.outcome === "no_show") myStatus = event.overturned ? "no_show_overturned" : "no_show";
+    else if (event?.outcome === "cancelled_late") myStatus = "cancelled_late";
+    else if (event?.outcome === "completed" || (mineNow && r.status === "completed")) myStatus = "completed";
+    if (!myStatus) continue;
+
+    const appeal = db.appeals.find((a) => a.requestId === r.id && a.volunteerId === person.id);
+    const eventAt = event?.at ?? r.completedAt ?? r.acceptedAt;
+    accepted.push({
       ...publicView(db, r),
-      ...(r.status === "accepted" ? { privateDetails: r.privateDetails, contactPhone: r.contactPhone ?? "" } : {}),
-    }));
-  const newestFirst = (a, b) => new Date(b.createdAt) - new Date(a.createdAt);
+      myStatus,
+      eventAt,
+      // Private details only while the task is yours and still active.
+      ...(myStatus === "active" ? { privateDetails: r.privateDetails, contactPhone: r.contactPhone ?? "" } : {}),
+      appeal: appeal ? appealSummary(appeal) : null,
+      canAppeal: myStatus === "no_show" && !appeal && now - new Date(event.at) < APPEAL_WINDOW_DAYS * DAY_MS,
+    });
+  }
+  const newestFirst = (a, b) => new Date(b.eventAt ?? b.createdAt) - new Date(a.eventAt ?? a.createdAt);
   return { posted: posted.sort(newestFirst), accepted: accepted.sort(newestFirst) };
 }
 
@@ -630,6 +670,125 @@ export function resolveReport(db, person, circleId, id) {
   if (!r) fail("Report not found", 404);
   r.resolved = true;
   return { ok: true };
+}
+
+// ---------- appeals ----------
+// A volunteer reported as a no-show can appeal with a statement and up to 3
+// photos. Organizers of that neighborhood decide; nobody decides their own case.
+// The penalty stays while the appeal is pending, so appealing everything
+// doesn't dodge penalties. If an organizer removes the no-show, the event is
+// marked `overturned` and reputation.js ignores it.
+
+const appealSummary = (a) => ({
+  id: a.id, status: a.status, createdAt: a.createdAt,
+  decidedAt: a.decidedAt ?? null, decisionNote: a.decisionNote ?? "",
+});
+
+/** Images arrive as JPEG data URLs, already re-encoded on the phone (which strips GPS/EXIF). */
+function decodeImage(dataUrl, n) {
+  const match = /^data:image\/jpeg;base64,([A-Za-z0-9+/=]+)$/.exec(String(dataUrl ?? ""));
+  if (!match) fail(`Photo ${n} isn't a JPEG image`);
+  const bytes = Buffer.from(match[1], "base64");
+  if (bytes.length > MAX_IMAGE_BYTES) fail(`Photo ${n} is too large`);
+  if (bytes[0] !== 0xff || bytes[1] !== 0xd8 || bytes[2] !== 0xff) fail(`Photo ${n} isn't a JPEG image`);
+  return bytes;
+}
+
+export async function fileAppeal(db, blobs, person, body, now) {
+  const r = db.requests.find((x) => x.id === body.requestId);
+  if (!r) fail("Request not found", 404);
+  const event = person.history.find((e) => e.requestId === r.id && e.outcome === "no_show" && !e.overturned);
+  if (!event) fail("There's no no-show on your record for this request");
+  if (db.appeals.some((a) => a.requestId === r.id && a.volunteerId === person.id)) fail("You've already appealed this one");
+  if (now - new Date(event.at) > APPEAL_WINDOW_DAYS * DAY_MS) fail(`Appeals have to be filed within ${APPEAL_WINDOW_DAYS} days`);
+
+  const statement = text(body.statement, 1000, "Statement");
+  if (statement.length < 20) fail("Tell the organizer what happened (at least a sentence or two)");
+  const images = Array.isArray(body.images) ? body.images : [];
+  if (images.length > MAX_APPEAL_IMAGES) fail(`You can attach up to ${MAX_APPEAL_IMAGES} photos`);
+  const decoded = images.map((img, i) => decodeImage(img, i + 1)); // validate all before storing any
+
+  const id = makeId("ap");
+  const imageIds = [];
+  for (const [i, bytes] of decoded.entries()) {
+    const imageId = `${id}_${i}`;
+    await blobs.put(imageId, bytes);
+    imageIds.push(imageId);
+  }
+  db.appeals.push({
+    id,
+    circleId: r.circleId,
+    requestId: r.id,
+    volunteerId: person.id,
+    requesterId: r.requesterId,
+    noShowAt: event.at,
+    statement,
+    imageIds,
+    status: "pending",
+    createdAt: now.toISOString(),
+  });
+  return { id };
+}
+
+/** What organizers see, with context to judge fairly. */
+function appealForOrganizer(db, a, now) {
+  const r = db.requests.find((x) => x.id === a.requestId);
+  const volunteer = personById(db, a.volunteerId);
+  const requester = personById(db, a.requesterId);
+  // How often has this requester reported no-shows? Someone who reports everyone stands out.
+  const reportsByRequester = db.people.reduce(
+    (n, p) => n + p.history.filter((e) => e.outcome === "no_show" && e.requesterId === a.requesterId).length, 0
+  );
+  const requestsByRequester = db.requests.filter((x) => x.requesterId === a.requesterId).length;
+  const volunteerNoShows = volunteer.history.filter((e) => e.outcome === "no_show").length;
+  return {
+    ...appealSummary(a),
+    statement: a.statement,
+    imageCount: a.imageIds.length,
+    noShowAt: a.noShowAt,
+    request: r ? { description: r.description, taskLabel: TASK_TYPES[r.taskType].label, window: r.window } : null,
+    volunteer: {
+      id: volunteer.id, name: volunteer.name, isMinor: volunteer.isMinor,
+      reputation: repOf(volunteer, now), noShows: volunteerNoShows,
+      completed: volunteer.history.filter((e) => e.outcome === "completed").length,
+    },
+    requester: { id: requester?.id, name: requester?.name ?? "Unknown", noShowsReported: reportsByRequester, requests: requestsByRequester },
+  };
+}
+
+export async function appealImage(db, blobs, person, appealId, n) {
+  const a = db.appeals.find((x) => x.id === appealId);
+  if (!a) fail("Appeal not found", 404);
+  const isOrganizer = membership(db, person.id, a.circleId)?.role === "organizer"
+    && membership(db, person.id, a.circleId)?.status === "active";
+  if (a.volunteerId !== person.id && !isOrganizer) fail("Appeal not found", 404);
+  const imageId = a.imageIds[Number(n)];
+  if (!imageId) fail("Photo not found", 404);
+  const bytes = await blobs.get(imageId);
+  if (!bytes) fail("Photo not found", 404);
+  return { dataUrl: `data:image/jpeg;base64,${bytes.toString("base64")}` };
+}
+
+export function decideAppeal(db, person, appealId, body, now) {
+  const a = db.appeals.find((x) => x.id === appealId);
+  if (!a) fail("Appeal not found", 404);
+  requireOrganizer(db, person, a.circleId);
+  if (person.id === a.volunteerId || person.id === a.requesterId) {
+    fail("You're part of this case, so another organizer has to decide it");
+  }
+  if (a.status !== "pending") fail("This appeal was already decided");
+  if (!["overturn", "uphold"].includes(body.decision)) fail("Choose a decision");
+
+  a.status = body.decision === "overturn" ? "overturned" : "upheld";
+  a.decisionNote = text(body.note, 300, "Note");
+  a.decidedBy = person.id;
+  a.decidedAt = now.toISOString();
+  if (a.status === "overturned") {
+    const volunteer = personById(db, a.volunteerId);
+    const event = volunteer.history.find((e) => e.requestId === a.requestId && e.outcome === "no_show" && !e.overturned);
+    if (event) event.overturned = true;
+  }
+  return { status: a.status };
 }
 
 // ---------- impact ----------

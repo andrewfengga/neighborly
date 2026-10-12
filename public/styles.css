@@ -319,3 +319,34 @@ dialog::backdrop { background: rgb(0 0 0 / .4); }
 .rep-math td:last-child { text-align: right; font-weight: 600; white-space: nowrap; padding-left: 12px; }
 .rep-math .muted { font-weight: 400; font-size: 12px; }
 .wbar.bad i { background: var(--bad-ink); }
+
+/* ---------- mine tabs, appeals ---------- */
+.segmented {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; margin: 4px 0 4px;
+  background: var(--surface-2); border-radius: 14px;
+}
+.segmented a {
+  display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 42px;
+  border-radius: 10px; color: var(--ink-2); text-decoration: none; font-weight: 600; font-size: 14.5px;
+}
+.segmented a.on { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
+.count {
+  display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 6px;
+  border-radius: 999px; background: var(--brand-soft); color: var(--brand); font-size: 12px;
+}
+.count.bad { background: var(--bad-ink); color: #fff; }
+.card-bad { border-color: color-mix(in srgb, var(--bad-ink) 45%, var(--border)); background: color-mix(in srgb, var(--bad-bg) 45%, var(--surface)); }
+.btn.danger-solid { background: var(--bad-ink); border-color: var(--bad-ink); color: #fff; }
+.guardian-box { border: 1px solid var(--border); border-radius: 12px; padding: 12px; margin-bottom: 14px; background: var(--warn-bg); color: var(--warn-ink); }
+.guardian-box .field > span { color: var(--warn-ink); }
+.appeal-thumbs { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.appeal-thumbs .thumb { position: relative; }
+.appeal-thumbs img { width: 76px; height: 76px; object-fit: cover; border-radius: 10px; display: block; border: 1px solid var(--border); }
+.appeal-thumbs button {
+  position: absolute; top: -6px; right: -6px; width: 24px; height: 24px; border-radius: 50%;
+  border: 0; background: var(--ink); color: var(--bg); cursor: pointer; font-size: 15px; line-height: 1;
+}
+.statement { margin: 12px 0; padding: 10px 12px; border-left: 3px solid var(--border); background: var(--surface); border-radius: 0 10px 10px 0; font-size: 14.5px; white-space: pre-wrap; }
+.appeal-context { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; font-size: 13.5px; }
+@media (max-width: 420px) { .appeal-context { grid-template-columns: 1fr; } }
+.subhead { font-size: 15px; display: flex; gap: 8px; align-items: center; margin: 4px 0 10px; }
