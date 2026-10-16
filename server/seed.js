@@ -74,7 +74,7 @@ export function seedDemo(now = new Date()) {
 
   const member = (personId, circleId, role = "member", extra = {}) =>
     db.memberships.push({ personId, circleId, role, status: "active", joinedAt: d(-30), ...extra });
-  member("p_priya", "c_maple", "organizer");
+  member("p_priya", "c_maple", "organizer", { lastSeenActivityAt: d(-1) });
   ["p_maya", "p_tom", "p_alvarez", "p_chen", "p_okafor"].forEach((p) => member(p, "c_maple"));
   member("p_tom", "c_youth", "organizer");
   member("p_maya", "c_youth");
@@ -124,7 +124,7 @@ export function seedDemo(now = new Date()) {
 
   // Past requests — so the impact screen has something to show in the demo.
   const past = [
-    ["groceries", -20, 1.5, "p_maya"], ["tech_help", -18, 5, "p_tom"], ["yard_work", -16, 20, "p_maya"],
+    ["groceries", -45, 3, "p_priya"], ["groceries", -20, 1.5, "p_maya"], ["tech_help", -18, 5, "p_tom"], ["yard_work", -16, 20, "p_maya"],
     ["ride", -14, 3, "p_tom"], ["groceries", -11, 0.8, "p_priya"], ["moving", -9, 30, "p_tom"],
     ["snow_leaves", -7, 9, "p_maya"], ["groceries", -5, 2, "p_priya"], ["tech_help", -3, null, null],
   ];
@@ -141,6 +141,18 @@ export function seedDemo(now = new Date()) {
       })
     );
   });
+
+  // The activity log for the no-show story (older requests are rebuilt from their own fields).
+  const ev = (requestId, type, actorId, at, extra = {}) =>
+    db.activity.push({ id: `ev_${db.activity.length}`, circleId: "c_maple", requestId, type, actorId, subjectId: null, at, detail: {}, ...extra });
+  for (const r of db.requests.filter((x) => x.status === "open")) {
+    db.activity.push({ id: `ev_${db.activity.length}`, circleId: r.circleId, requestId: r.id, type: "posted",
+      actorId: r.requesterId, subjectId: null, at: r.createdAt, detail: {} });
+  }
+  ev("r_curb", "posted", "p_chen", d(-3));
+  ev("r_curb", "accepted", "p_tom", d(-2.8));
+  ev("r_curb", "no_show", "p_chen", d(-2), { subjectId: "p_tom" });
+  ev("r_curb", "withdrawn", "p_chen", d(-1.9));
 
   return db;
 }

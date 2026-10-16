@@ -419,6 +419,7 @@ async function hoodList() {
           ${c.role === "organizer" ? `<span class="pill brand">Organizer</span>` : ""}
           ${c.pending ? `<span class="pill bad">${c.pending} asking to join</span>` : ""}
           ${c.appeals ? `<span class="pill bad">${c.appeals} appeal${c.appeals === 1 ? "" : "s"} to review</span>` : ""}
+          ${c.newActivity ? `<span class="pill brand">${c.newActivity} new update${c.newActivity === 1 ? "" : "s"}</span>` : ""}
         </div>
       </a>`).join("")}` : ""}`;
 }
@@ -569,9 +570,117 @@ function findCard(c) {
     </article>`;
 }
 
+// ---------- organizer activity feed ----------
+// Active | Past, then collapsible groups by when the request was posted
+// (Today, Past 7 days, Past 30 days, Older), like a phone's browsing history.
+
+let feed = null; // last /activity response
+let feedTab = "active";
+let feedOpen = null; // which groups are expanded; null = just the newest non-empty one
+
+const BUCKETS = [["today", "Today"], ["week", "Past 7 days"], ["month", "Past 30 days"], ["older", "Older"]];
+
+function bucketOf(iso) {
+  const d = new Date(iso);
+  const now = new Date();
+  if (d >= new Date(now.getFullYear(), now.getMonth(), now.getDate())) return "today";
+  const days = (now - d) / 864e5;
+  return days <= 7 ? "week" : days <= 30 ? "month" : "older";
+}
+
+const fmtStamp = (iso) => {
+  const d = new Date(iso);
+  return d.toDateString() === new Date().toDateString() ? fmtTime(d) : `${dayFmt.format(d)}, ${fmtTime(d)}`;
+};
+
+const who = (p) => (p ? `<b>${esc(p.name)}</b>${p.isMinor ? ` <span class="pill warn tiny">under 18</span>` : ""}` : "<b>A former member</b>");
+
+function eventLine(e) {
+  const reason = { removed: " (removed by an organizer)", left: " (left the neighborhood)" }[e.detail.reason] ?? "";
+  switch (e.type) {
+    case "posted": return `${who(e.actor)} posted the request`;
+    case "accepted": return `${who(e.actor)} offered to help`;
+    case "released": return `${who(e.actor)} backed out${e.detail.late ? ` <span class="pill warn tiny">late</span>` : ""}${reason}`;
+    case "completed": return `${who(e.actor)} marked it done${e.subject ? `, helped by ${who(e.subject)}` : ""}`;
+    case "no_show": return `${who(e.actor)} reported ${who(e.subject)} as a no-show`;
+    case "withdrawn": return `${who(e.actor)} withdrew the request${reason}`;
+    case "appeal_filed": return `${who(e.actor)} appealed the no-show`;
+    case "appeal_decided": return `${who(e.actor)} ${e.detail.status === "overturned" ? "removed the no-show" : "kept the no-show"} after reviewing the appeal`;
+    default: return esc(e.type);
+  }
+}
+
+const FEED_STATUS = {
+  open: ["Waiting for a volunteer", "warn"],
+  accepted: ["Someone's helping", "good"],
+  completed: ["Done", "good"],
+  cancelled: ["Withdrawn", ""],
+};
+
+function feedCard(item) {
+  const [label, tone] = FEED_STATUS[item.status];
+  const icons = { posted: "＋", accepted: "✋", released: "↩", completed: "✓", no_show: "✗", withdrawn: "–", appeal_filed: "⚑", appeal_decided: "⚖" };
+  return `
+    <article class="card feed-card ${item.isNew ? "is-new" : ""}">
+      <div class="row spread">
+        <div class="row"><span class="pill brand">${esc(item.taskLabel)}</span><span class="pill">${SETTING_LABEL[item.setting]}</span></div>
+        <span class="pill ${tone}">${item.status === "accepted" && item.helper ? `${esc(item.helper.name.split(" ")[0])} is helping` : label}</span>
+      </div>
+      <div class="req-title">${item.isNew ? `<span class="new-dot" title="New since you last looked"></span>` : ""}${esc(item.description)}</div>
+      <div class="muted">${esc(item.requester?.name ?? "A former member")}${item.onBehalfOf ? ` for ${esc(item.onBehalfOf)}` : ""}
+        · needed ${fmtWindow(item.window)}${item.housebound ? ` · <span style="color:var(--warn-ink)">housebound</span>` : ""}</div>
+      ${item.active && item.helper?.isMinor ? `
+        <div class="notice warn small" style="margin:10px 0 0">A volunteer under 18 is on this task. ${SETTING_LABEL[item.setting]} only, never inside a home or a car.</div>` : ""}
+      <ol class="timeline">
+        ${item.events.map((e) => `
+          <li class="ev-${e.type}"><span class="ev-ico" aria-hidden="true">${icons[e.type] ?? "•"}</span>
+            <span>${eventLine(e)}</span><time>${fmtStamp(e.at)}</time></li>`).join("")}
+      </ol>
+    </article>`;
+}
+
+function activitySection() {
+  const isActive = (i) => i.active;
+  const inTab = feed.items.filter((i) => (feedTab === "active" ? isActive(i) : !isActive(i)));
+  const groups = BUCKETS.map(([key, label]) => [key, label, inTab.filter((i) => bucketOf(i.createdAt) === key)])
+    .filter(([, , list]) => list.length);
+  const open = feedOpen ?? new Set(groups.length ? [groups[0][0]] : []);
+  const tabCount = (active) => feed.items.filter((i) => isActive(i) === active).length;
+  const tabNew = (active) => feed.items.filter((i) => isActive(i) === active && i.isNew).length;
+
+  return `
+    <h2>Activity <span class="muted" style="font-weight:400;font-size:13px">only organizers see this</span></h2>
+    <div class="segmented" role="tablist">
+      ${[["active", "Active", true], ["past", "Past", false]].map(([key, label, active]) => `
+        <a role="tab" href="#" data-action="feed-tab" data-tab="${key}" class="${feedTab === key ? "on" : ""}" aria-selected="${feedTab === key}">
+          ${label} <span class="count">${tabCount(active)}</span>${tabNew(active) ? ` <span class="new-dot" title="${tabNew(active)} with new activity"></span>` : ""}</a>`).join("")}
+    </div>
+    ${groups.length ? groups.map(([key, label, list]) => {
+      const fresh = list.filter((i) => i.isNew).length;
+      return `
+        <details class="bucket" data-bucket="${key}" ${open.has(key) ? "open" : ""}>
+          <summary>
+            <span class="bucket-label">${label}</span>
+            ${fresh ? `<span class="pill bad tiny">${fresh} new</span>` : ""}
+            <span class="count">${list.length}</span>
+          </summary>
+          <div class="bucket-body">${list.map(feedCard).join("")}</div>
+        </details>`;
+    }).join("") : `<p class="muted">${feedTab === "active" ? "No open requests right now." : "Finished and withdrawn requests show up here."}</p>`}`;
+}
+
+function drawActivity() {
+  const el = $("#activity");
+  if (el && feed) el.innerHTML = activitySection();
+}
+
 async function hoodDetail(id) {
   const [c, m] = await Promise.all([api(`/api/circles/${id}`), api(`/api/circles/${id}/metrics`)]);
   const organizer = c.role === "organizer";
+  if (organizer) {
+    feed = await api(`/api/circles/${id}/activity`);
+    feedOpen = null;
+  }
   app.innerHTML = `
     <a class="back" href="#/hoods">‹ Neighborhoods</a>
     <h1>${esc(c.name)}</h1>
@@ -583,6 +692,8 @@ async function hoodDetail(id) {
 
     ${organizer ? inviteCard(c) + pendingSection(c) : ""}
 
+    ${organizer ? `<section id="activity">${activitySection()}</section>` : ""}
+
     <h2>Impact</h2>
     ${impactSection(m, c)}
 
@@ -591,7 +702,30 @@ async function hoodDetail(id) {
     <div class="actions" style="margin-top:24px">
       <button class="btn danger" data-action="leave" data-id="${esc(c.id)}" data-name="${esc(c.name)}">Leave neighborhood</button>
     </div>`;
+
+  if (!organizer) return;
+  // Live: refresh the feed every 20s. Keep "new" highlights for this whole visit,
+  // even though each refresh marks the feed as seen on the server.
+  const newThisVisit = new Set(feed.items.filter((i) => i.isNew).map((i) => i.id));
+  clearInterval(pollTimer);
+  pollTimer = setInterval(async () => {
+    if (!location.hash.startsWith(`#/hoods/${id}`) || document.hidden || $("#dialog").open) return;
+    try {
+      feed = await api(`/api/circles/${id}/activity`);
+      for (const i of feed.items) {
+        if (i.isNew) newThisVisit.add(i.id);
+        i.isNew = newThisVisit.has(i.id);
+      }
+      drawActivity();
+    } catch { /* try again next tick */ }
+  }, 20000);
 }
+
+// Remember which activity groups are expanded, so a refresh doesn't collapse them.
+document.addEventListener("toggle", (e) => {
+  if (!e.target.matches?.("#activity details.bucket")) return;
+  feedOpen = new Set([...document.querySelectorAll("#activity details.bucket[open]")].map((d) => d.dataset.bucket));
+}, true);
 
 function inviteCard(c) {
   return `
@@ -1325,6 +1459,11 @@ const actions = {
     await api(`/api/appeals/${id}/decide`, { method: "POST", body: { decision, note } });
     toast(decision === "overturn" ? "No-show removed." : "No-show kept.");
     await hoodDetail(circle);
+  },
+  "feed-tab"(el) {
+    feedTab = el.dataset.tab;
+    feedOpen = null;
+    drawActivity();
   },
   async "share-invite"(el) {
     await shareInvite({ name: el.dataset.name, inviteKey: el.dataset.key });

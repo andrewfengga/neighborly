@@ -309,3 +309,39 @@ test("sign-up for a minor needs a guardian name AND a real phone number", () => 
   const { token } = api.signup(db, { name: "A", isMinor: true, guardianName: "Dana Lee", guardianPhone: "(555) 444-1212" }, now);
   assert.equal(api.personByToken(db, token).guardianContact, "Dana Lee: (555) 444-1212");
 });
+
+// ---------- organizer activity feed ----------
+
+test("activity feed: organizers only, and never shows private details or phones", () => {
+  const { db, tom, priya } = fresh();
+  assert.throws(() => api.activityFeed(db, tom, "c_maple", now), /organizers/);
+  const json = JSON.stringify(api.activityFeed(db, priya, "c_maple", now));
+  assert.ok(!json.includes("412 Mill Creek Ln"));
+  assert.ok(!json.includes("010-2233"));
+});
+
+test("activity feed: every step of a request shows up in its timeline, with minors flagged", () => {
+  const { db, maya, rosa, priya } = fresh();
+  api.act(db, maya, "r_groc", "accept", now);
+  api.act(db, rosa, "r_groc", "complete", now);
+  const item = api.activityFeed(db, priya, "c_maple", now).items.find((i) => i.id === "r_groc");
+  assert.deepEqual(item.events.map((e) => e.type), ["posted", "accepted", "completed"]);
+  assert.equal(item.events[1].actor.isMinor, true);
+  assert.equal(item.active, false);
+});
+
+test("activity feed: the no-show story, and the 'new' badge clears once seen", () => {
+  const { db, priya } = fresh();
+  const curb = api.activityFeed(db, priya, "c_maple", now).items.find((i) => i.id === "r_curb");
+  assert.deepEqual(curb.events.map((e) => e.type), ["posted", "accepted", "no_show", "withdrawn"]);
+  assert.equal(api.me(db, priya, {}, now).circles.find((c) => c.id === "c_maple").newActivity, 0, "opening the feed marks it seen");
+});
+
+test("activity feed: backing out and being removed are recorded", () => {
+  const { db, tom, priya } = fresh();
+  api.act(db, tom, "r_phone", "accept", now);
+  api.decideMember(db, priya, "c_maple", tom.id, "remove", now);
+  const phone = api.activityFeed(db, priya, "c_maple", now).items.find((i) => i.id === "r_phone");
+  const released = phone.events.find((e) => e.type === "released");
+  assert.equal(released.detail.reason, "removed");
+});

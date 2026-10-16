@@ -144,13 +144,14 @@ const routes = [
   route("POST /api/circles/join", (c) => api.joinWithKey(db, c.me, c.body, c.now), true, true),
   route("GET /api/circles/:id", (c) => api.circleDetail(db, c.me, c.params[0], c.now)),
   route("POST /api/circles/:id/request", (c) => api.requestToJoin(db, c.me, c.params[0], c.body, c.now), true, true),
-  route("POST /api/circles/:id/leave", (c) => api.leaveCircle(db, c.me, c.params[0]), true, true),
+  route("POST /api/circles/:id/leave", (c) => api.leaveCircle(db, c.me, c.params[0], c.now), true, true),
   route("POST /api/circles/:id/key", (c) => api.rotateKey(db, c.me, c.params[0]), true, true),
   route("POST /api/circles/:id/members/:pid/:decision",
     (c) => c.params[2] === "organizer"
       ? api.makeOrganizer(db, c.me, c.params[0], c.params[1])
       : api.decideMember(db, c.me, c.params[0], c.params[1], c.params[2], c.now), true, true),
   route("POST /api/circles/:id/reports/:rid/resolve", (c) => api.resolveReport(db, c.me, c.params[0], c.params[1]), true, true),
+  route("GET /api/circles/:id/activity", (c) => api.activityFeed(db, c.me, c.params[0], c.now), true, true),
   route("GET /api/circles/:id/metrics", (c) => api.metrics(db, c.me, c.params[0])),
   route("GET /api/circles/:id/metrics.csv", (c) => ({ csv: api.metricsCsv(db, c.me, c.params[0]) })),
 

@@ -9,7 +9,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-export const emptyDb = () => ({ people: [], circles: [], memberships: [], requests: [], reports: [], appeals: [] });
+export const emptyDb = () => ({ people: [], circles: [], memberships: [], requests: [], reports: [], appeals: [], activity: [] });
 const withTables = (data) => ({ ...emptyDb(), ...data });
 
 /** Synchronous file store. `initial` replaces whatever is on disk (demo mode). */

@@ -9,6 +9,7 @@
 //                (active, pending, denied, removed, left)
 //   requests     help requests, each inside one circle
 //   reports      private safety reports to a circle's organizers
+//   activity     what happened to each request, for the organizer's feed
 
 import crypto from "node:crypto";
 import { createRequest, createVolunteer, makeId } from "../src/models.js";
@@ -142,6 +143,11 @@ function store(db, request) {
   else db.requests[i] = plain;
 }
 
+/** Append to the organizer activity log. Never holds private details or phone numbers. */
+function log(db, { circleId, requestId = null, type, actorId = null, subjectId = null, at, detail = {} }) {
+  db.activity.push({ id: makeId("ev"), circleId, requestId, type, actorId, subjectId, at: new Date(at).toISOString(), detail });
+}
+
 function saveHistory(person, volunteer) {
   person.history = JSON.parse(JSON.stringify(volunteer.history));
 }
@@ -239,7 +245,12 @@ export function me(db, person, { demo }, now) {
       const organizer = m.role === "organizer" && m.status === "active";
       const pending = organizer ? db.memberships.filter((x) => x.circleId === c.id && x.status === "pending").length : 0;
       const appeals = organizer ? db.appeals.filter((a) => a.circleId === c.id && a.status === "pending").length : 0;
-      return { id: c.id, name: c.name, city: c.city, state: c.state, visibility: c.visibility, role: m.role, status: m.status, pending, appeals };
+      // Things other people did since this organizer last opened the feed.
+      const newActivity = organizer
+        ? db.activity.filter((e) => e.circleId === c.id && e.actorId !== person.id
+            && (!m.lastSeenActivityAt || new Date(e.at) > new Date(m.lastSeenActivityAt))).length
+        : 0;
+      return { id: c.id, name: c.name, city: c.city, state: c.state, visibility: c.visibility, role: m.role, status: m.status, pending, appeals, newActivity };
     });
   return { person: rest, reputation: repOf(person, now), circles, demo };
 }
@@ -443,24 +454,29 @@ export function decideMember(db, person, circleId, targetId, decision, now) {
     if (targetId === person.id) fail("You can't remove yourself. Use Leave instead.");
     if (m.status !== "active") fail("They aren't an active member");
     m.status = "removed";
-    releaseWork(db, targetId, circleId);
+    releaseWork(db, targetId, circleId, now, "removed");
     return { status: "removed" };
   }
   fail("Unknown action", 404);
 }
 
 /** Someone left or was removed: withdraw their requests, free their tasks — in that circle only. */
-function releaseWork(db, personId, circleId) {
+function releaseWork(db, personId, circleId, now, reason) {
   for (const r of db.requests) {
     if (r.circleId !== circleId) continue;
-    if (r.requesterId === personId && (r.status === "open" || r.status === "accepted")) r.status = "cancelled";
+    const event = { circleId, requestId: r.id, actorId: personId, at: now, detail: { reason } };
+    if (r.requesterId === personId && (r.status === "open" || r.status === "accepted")) {
+      r.status = "cancelled";
+      log(db, { ...event, type: "withdrawn" });
+    }
     if (r.acceptedBy === personId && r.status === "accepted") {
       Object.assign(r, { status: "open", acceptedBy: null, acceptedAt: null });
+      log(db, { ...event, type: "released" });
     }
   }
 }
 
-export function leaveCircle(db, person, circleId) {
+export function leaveCircle(db, person, circleId, now = new Date()) {
   const m = requireMember(db, person, circleId);
   if (m.role === "organizer") {
     const others = db.memberships.filter((x) => x.circleId === circleId && x.status === "active" && x.personId !== person.id);
@@ -468,7 +484,7 @@ export function leaveCircle(db, person, circleId) {
     if (others.length && !otherOrganizers.length) fail("You're the only organizer. Make someone else an organizer before leaving.");
   }
   m.status = "left";
-  releaseWork(db, person.id, circleId);
+  releaseWork(db, person.id, circleId, now, "left");
   return { ok: true };
 }
 
@@ -563,6 +579,7 @@ export function postRequest(db, person, body, now) {
     createdAt: now,
   });
   store(db, request);
+  log(db, { circleId: circle.id, requestId: request.id, type: "posted", actorId: person.id, at: now });
   return { id: request.id };
 }
 
@@ -618,13 +635,17 @@ export function act(db, person, id, action, now) {
   if (!stored) fail("Request not found", 404);
   const request = hydrate(stored);
 
+  const event = { circleId: request.circleId, requestId: request.id, actorId: person.id, at: now };
   if (action === "accept") {
     if (!person.volunteering) fail("Turn on volunteering in your profile first");
     acceptRequest(toVolunteer(db, person, now), request, now);
+    log(db, { ...event, type: "accepted" });
   } else if (action === "cancel") {
     const volunteer = toVolunteer(db, person, now);
+    const before = volunteer.history.length;
     cancelAcceptance(request, volunteer, now);
     saveHistory(person, volunteer);
+    log(db, { ...event, type: "released", detail: { late: volunteer.history.length > before } });
   } else if (action === "complete" || action === "noshow") {
     if (!request.acceptedBy) fail("Nobody has accepted this request yet");
     const helperPerson = personById(db, request.acceptedBy);
@@ -632,9 +653,11 @@ export function act(db, person, id, action, now) {
     if (action === "complete") completeRequest(request, helper, { confirmedBy: person.id }, now);
     else reportNoShow(request, helper, { reportedBy: person.id }, now);
     saveHistory(helperPerson, helper);
+    log(db, { ...event, type: action === "complete" ? "completed" : "no_show", subjectId: helperPerson.id });
   } else if (action === "withdraw") {
     if (request.status === "completed") fail("This request is already done");
     request.status = "cancelled";
+    log(db, { ...event, type: "withdrawn" });
   } else {
     fail("Unknown action", 404);
   }
@@ -727,6 +750,7 @@ export async function fileAppeal(db, blobs, person, body, now) {
     status: "pending",
     createdAt: now.toISOString(),
   });
+  log(db, { circleId: r.circleId, requestId: r.id, type: "appeal_filed", actorId: person.id, at: now });
   return { id };
 }
 
@@ -788,7 +812,68 @@ export function decideAppeal(db, person, appealId, body, now) {
     const event = volunteer.history.find((e) => e.requestId === a.requestId && e.outcome === "no_show" && !e.overturned);
     if (event) event.overturned = true;
   }
+  log(db, { circleId: a.circleId, requestId: a.requestId, type: "appeal_decided", actorId: person.id, subjectId: a.volunteerId, at: now, detail: { status: a.status } });
   return { status: a.status };
+}
+
+// ---------- organizer activity feed ----------
+// One card per request with its timeline (posted → accepted → done, plus
+// cancellations, no-shows and appeals). Organizers only; no private details
+// or phone numbers. Opening the feed marks it as seen.
+
+const personRef = (db, id) => {
+  const p = id && personById(db, id);
+  return p ? { name: p.name, isMinor: p.isMinor } : null;
+};
+
+export function activityFeed(db, person, circleId, now) {
+  const m = requireOrganizer(db, person, circleId);
+  const lastSeen = m.lastSeenActivityAt ?? null;
+
+  const byRequest = new Map();
+  for (const e of db.activity) {
+    if (e.circleId !== circleId || !e.requestId) continue;
+    if (!byRequest.has(e.requestId)) byRequest.set(e.requestId, []);
+    byRequest.get(e.requestId).push(e);
+  }
+
+  const items = db.requests
+    .filter((r) => r.circleId === circleId)
+    .map((r) => {
+      const events = [...(byRequest.get(r.id) ?? [])];
+      // Requests from before the log existed: rebuild what the request itself remembers.
+      const has = (type) => events.some((e) => e.type === type);
+      if (!has("posted")) events.push({ type: "posted", actorId: r.requesterId, at: r.createdAt });
+      if (r.firstAcceptedAt && !has("accepted")) events.push({ type: "accepted", actorId: r.acceptedBy, at: r.firstAcceptedAt });
+      if (r.status === "completed" && !has("completed")) {
+        events.push({ type: "completed", actorId: r.requesterId, subjectId: r.acceptedBy, at: r.completedAt ?? r.acceptedAt ?? r.createdAt });
+      }
+      events.sort((a, b) => new Date(a.at) - new Date(b.at));
+
+      return {
+        id: r.id,
+        taskLabel: TASK_TYPES[r.taskType].label,
+        setting: TASK_TYPES[r.taskType].setting,
+        description: r.description,
+        onBehalfOf: r.onBehalfOf || "",
+        status: r.status,
+        active: r.status === "open" || r.status === "accepted",
+        createdAt: r.createdAt,
+        window: r.window,
+        housebound: r.housebound,
+        requester: personRef(db, r.requesterId),
+        helper: personRef(db, r.acceptedBy),
+        isNew: events.some((e) => e.actorId !== person.id && (!lastSeen || new Date(e.at) > new Date(lastSeen))),
+        events: events.map((e) => ({
+          type: e.type, at: e.at, detail: e.detail ?? {},
+          actor: personRef(db, e.actorId), subject: personRef(db, e.subjectId),
+        })),
+      };
+    })
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+  m.lastSeenActivityAt = now.toISOString();
+  return { items, lastSeen };
 }
 
 // ---------- impact ----------

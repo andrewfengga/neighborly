@@ -350,3 +350,27 @@ dialog::backdrop { background: rgb(0 0 0 / .4); }
 .appeal-context { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; font-size: 13.5px; }
 @media (max-width: 420px) { .appeal-context { grid-template-columns: 1fr; } }
 .subhead { font-size: 15px; display: flex; gap: 8px; align-items: center; margin: 4px 0 10px; }
+
+/* ---------- organizer activity feed ---------- */
+.pill.tiny { font-size: 11px; padding: 1px 7px; }
+.bucket { margin-top: 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); }
+.bucket > summary {
+  display: flex; align-items: center; gap: 8px; padding: 13px 16px; cursor: pointer;
+  list-style: none; font-weight: 650; min-height: 48px;
+}
+.bucket > summary::-webkit-details-marker { display: none; }
+.bucket > summary::before { content: "›"; font-size: 20px; color: var(--ink-3); transition: transform .15s; width: 12px; }
+.bucket[open] > summary::before { transform: rotate(90deg); }
+.bucket .bucket-label { flex: 1; }
+.bucket-body { padding: 0 10px 10px; }
+.bucket-body .card { margin-bottom: 8px; box-shadow: none; }
+.feed-card.is-new { border-color: color-mix(in srgb, var(--brand) 55%, var(--border)); }
+.new-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--brand); margin-right: 7px; vertical-align: 2px; }
+.timeline { list-style: none; margin: 12px 0 0; padding: 0; border-top: 1px solid var(--border); }
+.timeline li { display: grid; grid-template-columns: 22px 1fr auto; gap: 8px; align-items: baseline; padding: 7px 0; font-size: 13.5px; border-bottom: 1px dashed var(--border); }
+.timeline li:last-child { border-bottom: 0; }
+.timeline time { font-size: 12px; color: var(--ink-3); white-space: nowrap; }
+.ev-ico { text-align: center; color: var(--ink-3); }
+.ev-completed .ev-ico, .ev-appeal_decided .ev-ico { color: var(--good-ink); }
+.ev-no_show .ev-ico, .ev-released .ev-ico { color: var(--bad-ink); }
+@media (max-width: 420px) { .timeline li { grid-template-columns: 22px 1fr; } .timeline time { grid-column: 2; } }

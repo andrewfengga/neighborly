@@ -14,7 +14,7 @@ Requires Node 20+. No other dependencies.
 ```bash
 npm run demo:web     # sample data + a user switcher, resets on every start
 npm start            # real pilot data, saved in data/db.json
-npm test             # 68 tests
+npm test             # 72 tests
 ```
 
 Open http://localhost:3000. In demo mode, pick a person on the first screen, or switch
@@ -36,6 +36,13 @@ People can belong to several neighborhoods. Their board combines requests from a
 them, and their reputation follows them between neighborhoods. Organizers can approve
 members, remove members, make other adults organizers, and make a new invite key if
 the old one leaks.
+
+Organizers also get an **activity feed**: one card per request with its timeline
+(posted → offered to help → done, plus cancellations, no-shows and appeals), split into
+**Active** and **Past** and grouped into **Today / Past 7 days / Past 30 days / Older**.
+Volunteers under 18 are flagged on every task they take. A "new updates" badge on the
+Groups tab shows when something changed. Private details and phone numbers never
+appear in the feed.
 
 ### 1. Ask in one sentence
 "Need help carrying groceries in Saturday morning, I just had knee surgery" becomes a
