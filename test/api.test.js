@@ -350,8 +350,8 @@ test("activity feed: backing out and being removed are recorded", () => {
 
 test("leaderboard: members only, short names, only people who've helped", () => {
   const { db, priya, dev } = fresh();
-  assert.throws(() => api.leaderboard(db, dev, "c_maple", "all", now), /not a member/);
-  const lb = api.leaderboard(db, priya, "c_maple", "all", now);
+  assert.throws(() => api.leaderboard(db, dev, "c_maple", "all", "tasks", now), /not a member/);
+  const lb = api.leaderboard(db, priya, "c_maple", "all", "tasks", now);
   assert.ok(lb.rows.length > 0);
   assert.ok(lb.rows.every((r) => /^\w+ \w\.$/.test(r.name)), "names are shortened like 'Maya P.'");
   assert.ok(lb.rows.every((r) => r.tasks > 0));
@@ -372,14 +372,23 @@ test("leaderboard: helping the same neighbor over and over doesn't climb the boa
     api.act(db, sam, id, "accept", now);
     api.act(db, rosa, id, "complete", later);
   }
-  const row = api.leaderboard(db, priya, "c_maple", "all", later).rows.find((r) => r.id === sam.id);
+  const row = api.leaderboard(db, priya, "c_maple", "all", "tasks", later).rows.find((r) => r.id === sam.id);
   assert.equal(row.tasks, 2, "only 2 of 4 tasks for Rosa count");
   assert.equal(row.neighbors, 1);
 });
 
 test("leaderboard: removed members drop off", () => {
   const { db, priya, tom } = fresh();
-  assert.ok(api.leaderboard(db, priya, "c_maple", "all", now).rows.some((r) => r.id === tom.id));
+  assert.ok(api.leaderboard(db, priya, "c_maple", "all", "tasks", now).rows.some((r) => r.id === tom.id));
   api.decideMember(db, priya, "c_maple", tom.id, "remove", now);
-  assert.ok(!api.leaderboard(db, priya, "c_maple", "all", now).rows.some((r) => r.id === tom.id));
+  assert.ok(!api.leaderboard(db, priya, "c_maple", "all", "tasks", now).rows.some((r) => r.id === tom.id));
+});
+
+test("leaderboard: can sort by reliability instead of tasks", () => {
+  const { db, priya } = fresh();
+  const byTasks = api.leaderboard(db, priya, "c_maple", "all", "tasks", now).rows;
+  const byRel = api.leaderboard(db, priya, "c_maple", "all", "reliability", now).rows;
+  assert.equal(byRel.length, byTasks.length, "same people, different order");
+  for (let i = 1; i < byRel.length; i++) assert.ok(byRel[i - 1].reliability >= byRel[i].reliability);
+  assert.equal(byRel.at(-1).name, "Tom R.", "Tom's no-show puts him last on reliability");
 });

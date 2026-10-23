@@ -891,7 +891,9 @@ const shortName = (name) => {
   return rest.length ? `${first} ${rest.at(-1)[0]}.` : first;
 };
 
-export function leaderboard(db, person, circleId, range, now) {
+/** sort: "tasks" (most completed, ties by reliability) or "reliability" (highest score, ties by tasks). */
+export function leaderboard(db, person, circleId, range, sort, now) {
+  const byReliability = sort === "reliability";
   requireMember(db, person, circleId);
   const since = range === "all" ? null : new Date(now.getFullYear(), now.getMonth(), 1); // this calendar month
 
@@ -923,16 +925,19 @@ export function leaderboard(db, person, circleId, range, now) {
       isMe: helperId === person.id,
     });
   }
-  rows.sort((a, b) => b.tasks - a.tasks || b.reliability - a.reliability || a.name.localeCompare(b.name));
+  const keys = byReliability ? ["reliability", "tasks"] : ["tasks", "reliability"];
+  rows.sort((a, b) => b[keys[0]] - a[keys[0]] || b[keys[1]] - a[keys[1]] || a.name.localeCompare(b.name));
   rows.forEach((row, i) => {
     // Ties share a rank: 1, 2, 2, 4.
-    row.rank = i > 0 && row.tasks === rows[i - 1].tasks && row.reliability === rows[i - 1].reliability ? rows[i - 1].rank : i + 1;
+    const prev = rows[i - 1];
+    row.rank = prev && keys.every((k) => row[k] === prev[k]) ? prev.rank : i + 1;
   });
 
   const top = rows.slice(0, LEADERBOARD_SIZE);
   const mine = rows.find((r) => r.isMe);
   return {
     range: since ? "month" : "all",
+    sort: byReliability ? "reliability" : "tasks",
     rows: top,
     // Your own spot, only shown to you, if you're not in the top list.
     me: mine && !top.includes(mine) ? mine : null,

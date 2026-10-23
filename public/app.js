@@ -1182,40 +1182,60 @@ function taskCard(r) {
 // One per neighborhood. #/leaders/<circleId>/<month|all>
 
 let leadersRange = "month";
+let leadersSort = "tasks";
 
-async function leaders(circleId, range) {
+// #/leaders/<circleId>/<month|all>/<tasks|reliability>
+async function leaders(circleId, range, sort) {
   const circles = activeCircles();
   if (!circles.length) return hoods();
   const circle = circles.find((c) => c.id === circleId) ?? circles[0];
   if (range === "month" || range === "all") leadersRange = range;
-  const lb = await api(`/api/circles/${circle.id}/leaderboard?range=${leadersRange}`);
+  if (sort === "tasks" || sort === "reliability") leadersSort = sort;
+  const lb = await api(`/api/circles/${circle.id}/leaderboard?range=${leadersRange}&sort=${leadersSort}`);
+  const byRel = leadersSort === "reliability";
   const medal = (rank) => ["🥇", "🥈", "🥉"][rank - 1];
-  const link = (id, r) => `#/leaders/${encodeURIComponent(id)}/${r}`;
+  const link = (id, r = leadersRange, s = leadersSort) => `#/leaders/${encodeURIComponent(id)}/${r}/${s}`;
+  // The big number on the right is whatever we're sorting by; the other one goes in the small line.
+  const main = (r) => (byRel
+    ? { n: Math.round(r.reliability), unit: "reliability" }
+    : { n: r.tasks, unit: `task${r.tasks === 1 ? "" : "s"}` });
+  const detail = (r) => byRel
+    ? `${r.tasks} task${r.tasks === 1 ? "" : "s"} · helped ${r.neighbors} neighbor${r.neighbors === 1 ? "" : "s"}`
+    : `helped ${r.neighbors} neighbor${r.neighbors === 1 ? "" : "s"} · reliability ${Math.round(r.reliability)}`;
   const row = (r) => `
     <li class="${r.isMe ? "me" : ""}">
       <span class="rank">${r.rank <= 3 ? `<span class="medal">${medal(r.rank)}</span>` : r.rank}</span>
-      <span class="who"><b>${esc(r.name)}${r.isMe ? " (you)" : ""}</b>
-        <span class="muted">helped ${r.neighbors} neighbor${r.neighbors === 1 ? "" : "s"} · reliability ${Math.round(r.reliability)}</span></span>
-      <span class="tasks"><b>${r.tasks}</b><span class="muted">task${r.tasks === 1 ? "" : "s"}</span></span>
+      <span class="who"><b>${esc(r.name)}${r.isMe ? " (you)" : ""}</b><span class="muted">${detail(r)}</span></span>
+      <span class="tasks"><b>${main(r).n}</b><span class="muted">${main(r).unit}</span></span>
     </li>`;
+  const tab = (href, on, label) =>
+    `<a role="tab" href="${href}" class="${on ? "on" : ""}" aria-selected="${on}">${label}</a>`;
   const top3 = lb.rows.slice(0, 3);
 
   app.innerHTML = `
     <h1>Leaderboard</h1>
-    <p class="lede">The neighbors who've helped the most in ${esc(circle.name)}.</p>
+    <p class="lede">${byRel ? "The most reliable helpers" : "The neighbors who've helped the most"} in ${esc(circle.name)}.</p>
     ${circles.length > 1 ? `
       <label class="field"><span>Neighborhood</span>
         <select id="lb-circle">${circles.map((c) => `<option value="${esc(c.id)}" ${c.id === circle.id ? "selected" : ""}>${esc(c.name)}</option>`).join("")}</select></label>` : ""}
-    <div class="segmented" role="tablist">
-      <a role="tab" href="${link(circle.id, "month")}" class="${leadersRange === "month" ? "on" : ""}" aria-selected="${leadersRange === "month"}">This month</a>
-      <a role="tab" href="${link(circle.id, "all")}" class="${leadersRange === "all" ? "on" : ""}" aria-selected="${leadersRange === "all"}">All time</a>
+    <div class="segmented" role="tablist" aria-label="Time range">
+      ${tab(link(circle.id, "month"), leadersRange === "month", "This month")}
+      ${tab(link(circle.id, "all"), leadersRange === "all", "All time")}
+    </div>
+    <div class="sort-row">
+      <span class="muted">Sort by</span>
+      <div class="segmented small" role="tablist" aria-label="Sort by">
+        ${tab(link(circle.id, leadersRange, "tasks"), !byRel, "Tasks completed")}
+        ${tab(link(circle.id, leadersRange, "reliability"), byRel, "Reliability")}
+      </div>
     </div>
 
     ${lb.rows.length ? `
       ${top3.length === 3 ? `
         <div class="podium" aria-hidden="true">
           ${[top3[1], top3[0], top3[2]].map((r) => `
-            <div class="p${r.rank}"><span class="medal">${medal(r.rank)}</span><b>${esc(r.name)}</b><span class="n">${r.tasks}</span><span class="muted">tasks</span></div>`).join("")}
+            <div class="p${r.rank}"><span class="medal">${medal(r.rank)}</span><b>${esc(r.name)}</b>
+              <span class="n">${main(r).n}</span><span class="muted">${byRel ? "reliability" : "tasks"}</span></div>`).join("")}
         </div>` : ""}
       <div class="card lb-card"><ol class="lb">${lb.rows.map(row).join("")}</ol></div>
       ${lb.me ? `
@@ -1226,10 +1246,13 @@ async function leaders(circleId, range) {
         <p>Nobody's finished a task here ${leadersRange === "month" ? "this month" : "yet"}. Help a neighbor to get on the board!</p>
         <a class="btn primary" href="#/board">See who needs help</a></div>`}
 
-    <p class="muted" style="margin-top:16px">Ranked by tasks completed; ties go to the higher reliability score.
+    <p class="muted" style="margin-top:16px">
+      ${byRel
+        ? `Ranked by reliability score (out of 100); ties go to whoever completed more tasks. Everyone shown helped ${leadersRange === "month" ? "at least once this month" : "at least once"}.`
+        : "Ranked by tasks completed; ties go to the higher reliability score."}
       To keep it fair, only 2 tasks for the same neighbor in a month count. Only people who've helped are shown.</p>`;
 
-  $("#lb-circle")?.addEventListener("change", (e) => (location.hash = link(e.target.value, leadersRange)));
+  $("#lb-circle")?.addEventListener("change", (e) => (location.hash = link(e.target.value)));
 }
 
 // ---------- me / profile ----------

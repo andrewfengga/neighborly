@@ -395,3 +395,6 @@ dialog::backdrop { background: rgb(0 0 0 / .4); }
 .podium .medal { font-size: 30px; display: block; }
 .podium b { display: block; margin-top: 4px; font-size: 14px; }
 .podium span.n { font: 600 20px/1.2 Fraunces, Georgia, serif; display: block; }
+.sort-row { display: flex; align-items: center; gap: 10px; margin: 10px 0 4px; }
+.sort-row .segmented { flex: 1; margin: 0; }
+.segmented.small a { min-height: 36px; font-size: 13.5px; }
