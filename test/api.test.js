@@ -345,3 +345,41 @@ test("activity feed: backing out and being removed are recorded", () => {
   const released = phone.events.find((e) => e.type === "released");
   assert.equal(released.detail.reason, "removed");
 });
+
+// ---------- leaderboard ----------
+
+test("leaderboard: members only, short names, only people who've helped", () => {
+  const { db, priya, dev } = fresh();
+  assert.throws(() => api.leaderboard(db, dev, "c_maple", "all", now), /not a member/);
+  const lb = api.leaderboard(db, priya, "c_maple", "all", now);
+  assert.ok(lb.rows.length > 0);
+  assert.ok(lb.rows.every((r) => /^\w+ \w\.$/.test(r.name)), "names are shortened like 'Maya P.'");
+  assert.ok(lb.rows.every((r) => r.tasks > 0));
+  assert.ok(!JSON.stringify(lb).includes("Patel"));
+});
+
+test("leaderboard: helping the same neighbor over and over doesn't climb the board", () => {
+  const { db, rosa, priya } = fresh();
+  const sam = newPerson(db);
+  api.joinWithKey(db, sam, { key: "MAP-LE2" }, now);
+  api.updateProfile(db, sam, { volunteering: true, skills: ["groceries"], slots: ["anytime"] });
+  const later = new Date(now.getTime() + 864e5); // daytime-safe: requests open now through 2 days
+  for (let i = 0; i < 4; i++) {
+    const { id } = api.postRequest(db, rosa, {
+      circleId: "c_maple", taskType: "groceries", description: `Groceries run ${i}`,
+      start: now.toISOString(), end: new Date(now.getTime() + 2 * 864e5).toISOString(),
+    }, now);
+    api.act(db, sam, id, "accept", now);
+    api.act(db, rosa, id, "complete", later);
+  }
+  const row = api.leaderboard(db, priya, "c_maple", "all", later).rows.find((r) => r.id === sam.id);
+  assert.equal(row.tasks, 2, "only 2 of 4 tasks for Rosa count");
+  assert.equal(row.neighbors, 1);
+});
+
+test("leaderboard: removed members drop off", () => {
+  const { db, priya, tom } = fresh();
+  assert.ok(api.leaderboard(db, priya, "c_maple", "all", now).rows.some((r) => r.id === tom.id));
+  api.decideMember(db, priya, "c_maple", tom.id, "remove", now);
+  assert.ok(!api.leaderboard(db, priya, "c_maple", "all", now).rows.some((r) => r.id === tom.id));
+});

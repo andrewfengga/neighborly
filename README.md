@@ -14,7 +14,7 @@ Requires Node 20+. No other dependencies.
 ```bash
 npm run demo:web     # sample data + a user switcher, resets on every start
 npm start            # real pilot data, saved in data/db.json
-npm test             # 72 tests
+npm test             # 75 tests
 ```
 
 Open http://localhost:3000. In demo mode, pick a person on the first screen, or switch
@@ -92,6 +92,9 @@ score = 60 + up to 20 "getting started" + up to 20 "consistency" − penalties
   180 days, so mistakes stay on the record longer than successes.
 
 Volunteers see the full breakdown and how much their next task would add.
+
+### Leaderboard
+A **Leaders** tab ranks each neighborhood's helpers by tasks completed (**This month** or **All time**), with ties going to the higher reliability score. It uses the same anti-collusion rule as reputation (2 tasks per neighbor per 30 days count), shows only people who have helped, and shortens names ("Maya P.") because every member can see it.
 
 ### 5. Measured impact ([src/metrics.js](src/metrics.js))
 The Impact tab computes the pilot claim from real timestamps only: *"Across N real

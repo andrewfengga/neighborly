@@ -96,7 +96,7 @@ main { max-width: 640px; margin: 0 auto; padding: 20px 16px 24px; }
 
 .tabs {
   position: fixed; bottom: 0; left: 0; right: 0; z-index: 5;
-  display: grid; grid-template-columns: repeat(5, 1fr);
+  display: grid; grid-template-columns: repeat(6, 1fr);
   background: var(--surface); border-top: 1px solid var(--border);
   padding: 6px max(8px, env(safe-area-inset-left)) max(8px, env(safe-area-inset-bottom));
 }
@@ -374,3 +374,24 @@ dialog::backdrop { background: rgb(0 0 0 / .4); }
 .ev-completed .ev-ico, .ev-appeal_decided .ev-ico { color: var(--good-ink); }
 .ev-no_show .ev-ico, .ev-released .ev-ico { color: var(--bad-ink); }
 @media (max-width: 420px) { .timeline li { grid-template-columns: 22px 1fr; } .timeline time { grid-column: 2; } }
+
+/* ---------- leaderboard ---------- */
+.lb { list-style: none; margin: 0; padding: 0; }
+.lb li {
+  display: grid; grid-template-columns: 40px 1fr auto; gap: 10px; align-items: center;
+  padding: 12px 14px; border-bottom: 1px solid var(--border);
+}
+.lb li:last-child { border-bottom: 0; }
+.lb .rank { font: 600 18px/1 Fraunces, Georgia, serif; text-align: center; color: var(--ink-3); }
+.lb .medal { font-size: 24px; line-height: 1; }
+.lb .who b { display: block; }
+.lb .tasks { text-align: right; font-variant-numeric: tabular-nums; }
+.lb .tasks b { font: 600 22px/1 Fraunces, Georgia, serif; display: block; }
+.lb li.me { background: var(--brand-soft); }
+.lb-card { padding: 0; overflow: hidden; }
+.podium { display: grid; grid-template-columns: 1fr 1.15fr 1fr; gap: 8px; align-items: end; margin: 6px 0 14px; }
+.podium div { text-align: center; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 6px; }
+.podium .p1 { padding-top: 20px; border-color: color-mix(in srgb, #e3b341 55%, var(--border)); }
+.podium .medal { font-size: 30px; display: block; }
+.podium b { display: block; margin-top: 4px; font-size: 14px; }
+.podium span.n { font: 600 20px/1.2 Fraunces, Georgia, serif; display: block; }

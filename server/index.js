@@ -152,6 +152,7 @@ const routes = [
       : api.decideMember(db, c.me, c.params[0], c.params[1], c.params[2], c.now), true, true),
   route("POST /api/circles/:id/reports/:rid/resolve", (c) => api.resolveReport(db, c.me, c.params[0], c.params[1]), true, true),
   route("GET /api/circles/:id/activity", (c) => api.activityFeed(db, c.me, c.params[0], c.now), true, true),
+  route("GET /api/circles/:id/leaderboard", (c) => api.leaderboard(db, c.me, c.params[0], c.query.get("range"), c.now)),
   route("GET /api/circles/:id/metrics", (c) => api.metrics(db, c.me, c.params[0])),
   route("GET /api/circles/:id/metrics.csv", (c) => ({ csv: api.metricsCsv(db, c.me, c.params[0]) })),
 

@@ -132,7 +132,7 @@ export function seedDemo(now = new Date()) {
     const created = d(daysAgo);
     const matched = hoursToMatch === null ? null : new Date(new Date(created).getTime() + hoursToMatch * 3600e3).toISOString();
     db.requests.push(
-      req(`r_past${i}`, "c_maple", "p_alvarez", type, "Earlier request", created, d(daysAgo + 2), {
+      req(`r_past${i}`, "c_maple", ["p_alvarez", "p_chen", "p_okafor"][i % 3], type, "Earlier request", created, d(daysAgo + 2), {
         createdAt: created,
         status: matched ? "completed" : "cancelled",
         acceptedBy: by,

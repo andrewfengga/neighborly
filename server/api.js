@@ -15,7 +15,7 @@ import crypto from "node:crypto";
 import { createRequest, createVolunteer, makeId } from "../src/models.js";
 import { checkEligibility, rankForVolunteer } from "../src/ranking.js";
 import { acceptRequest, cancelAcceptance, completeRequest, reportNoShow } from "../src/lifecycle.js";
-import { reputation } from "../src/reputation.js";
+import { reputation, countedFlags } from "../src/reputation.js";
 import { expandSlots, SLOTS } from "../src/availability.js";
 import { scopeCheck } from "../src/parse.js";
 import { circleMetrics, impactSentence } from "../src/metrics.js";
@@ -877,6 +877,68 @@ export function activityFeed(db, person, circleId, now) {
 }
 
 // ---------- impact ----------
+
+// ---------- leaderboard ----------
+// Per neighborhood: who has helped the most. Uses the same anti-collusion rule
+// as reputation (2 tasks per neighbor per 30 days), so friends can't climb by
+// helping each other. Only people who have helped appear, and names are
+// shortened ("Maya P.") because every member can see this.
+
+const LEADERBOARD_SIZE = 10;
+
+const shortName = (name) => {
+  const [first, ...rest] = name.trim().split(/\s+/);
+  return rest.length ? `${first} ${rest.at(-1)[0]}.` : first;
+};
+
+export function leaderboard(db, person, circleId, range, now) {
+  requireMember(db, person, circleId);
+  const since = range === "all" ? null : new Date(now.getFullYear(), now.getMonth(), 1); // this calendar month
+
+  // Every completed request in this neighborhood, grouped by who helped.
+  const byHelper = new Map();
+  for (const r of db.requests) {
+    if (r.circleId !== circleId || r.status !== "completed" || !r.acceptedBy) continue;
+    const at = new Date(r.completedAt ?? r.acceptedAt ?? r.createdAt);
+    if (!byHelper.has(r.acceptedBy)) byHelper.set(r.acceptedBy, []);
+    byHelper.get(r.acceptedBy).push({ outcome: "completed", at, requesterId: r.requesterId });
+  }
+
+  const activeIds = new Set(
+    db.memberships.filter((m) => m.circleId === circleId && m.status === "active").map((m) => m.personId)
+  );
+  const rows = [];
+  for (const [helperId, events] of byHelper) {
+    if (!activeIds.has(helperId)) continue; // people who left or were removed drop off
+    const counted = countedFlags(events);
+    const inRange = events.filter((e, i) => counted[i] && (!since || e.at >= since));
+    if (!inRange.length) continue;
+    const helper = personById(db, helperId);
+    rows.push({
+      id: helperId,
+      name: shortName(helper.name),
+      tasks: inRange.length,
+      neighbors: new Set(inRange.map((e) => e.requesterId)).size,
+      reliability: repOf(helper, now).score,
+      isMe: helperId === person.id,
+    });
+  }
+  rows.sort((a, b) => b.tasks - a.tasks || b.reliability - a.reliability || a.name.localeCompare(b.name));
+  rows.forEach((row, i) => {
+    // Ties share a rank: 1, 2, 2, 4.
+    row.rank = i > 0 && row.tasks === rows[i - 1].tasks && row.reliability === rows[i - 1].reliability ? rows[i - 1].rank : i + 1;
+  });
+
+  const top = rows.slice(0, LEADERBOARD_SIZE);
+  const mine = rows.find((r) => r.isMe);
+  return {
+    range: since ? "month" : "all",
+    rows: top,
+    // Your own spot, only shown to you, if you're not in the top list.
+    me: mine && !top.includes(mine) ? mine : null,
+    helpers: rows.length,
+  };
+}
 
 export function metrics(db, person, circleId) {
   requireMember(db, person, circleId);
