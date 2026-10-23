@@ -1184,6 +1184,13 @@ function taskCard(r) {
 let leadersRange = "month";
 let leadersSort = "tasks";
 
+/** Initials in a soft color picked from the name, so each person keeps the same color. */
+function avatar(name, size = "") {
+  const initials = name.replace(/\./g, "").split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase();
+  const hue = [...name].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) % 6, 7) + 1;
+  return `<span class="avatar av-${hue} ${size}" aria-hidden="true">${esc(initials)}</span>`;
+}
+
 // #/leaders/<circleId>/<month|all>/<tasks|reliability>
 async function leaders(circleId, range, sort) {
   const circles = activeCircles();
@@ -1193,24 +1200,42 @@ async function leaders(circleId, range, sort) {
   if (sort === "tasks" || sort === "reliability") leadersSort = sort;
   const lb = await api(`/api/circles/${circle.id}/leaderboard?range=${leadersRange}&sort=${leadersSort}`);
   const byRel = leadersSort === "reliability";
-  const medal = (rank) => ["🥇", "🥈", "🥉"][rank - 1];
   const link = (id, r = leadersRange, s = leadersSort) => `#/leaders/${encodeURIComponent(id)}/${r}/${s}`;
-  // The big number on the right is whatever we're sorting by; the other one goes in the small line.
-  const main = (r) => (byRel
-    ? { n: Math.round(r.reliability), unit: "reliability" }
-    : { n: r.tasks, unit: `task${r.tasks === 1 ? "" : "s"}` });
+
+  // The highlighted number is whatever we sort by; the bar compares it to the leader (or to 100).
+  const value = (r) => (byRel ? Math.round(r.reliability) : r.tasks);
+  const unit = (r) => (byRel ? "/ 100" : `task${r.tasks === 1 ? "" : "s"}`);
+  const maxTasks = Math.max(1, ...lb.rows.map((r) => r.tasks), lb.me?.tasks ?? 0);
+  const fill = (r) => (byRel ? r.reliability : (r.tasks / maxTasks) * 100);
   const detail = (r) => byRel
-    ? `${r.tasks} task${r.tasks === 1 ? "" : "s"} · helped ${r.neighbors} neighbor${r.neighbors === 1 ? "" : "s"}`
-    : `helped ${r.neighbors} neighbor${r.neighbors === 1 ? "" : "s"} · reliability ${Math.round(r.reliability)}`;
+    ? `${r.tasks} task${r.tasks === 1 ? "" : "s"} · ${r.neighbors} neighbor${r.neighbors === 1 ? "" : "s"} helped`
+    : `${r.neighbors} neighbor${r.neighbors === 1 ? "" : "s"} helped · reliability ${Math.round(r.reliability)}`;
+
   const row = (r) => `
     <li class="${r.isMe ? "me" : ""}">
-      <span class="rank">${r.rank <= 3 ? `<span class="medal">${medal(r.rank)}</span>` : r.rank}</span>
-      <span class="who"><b>${esc(r.name)}${r.isMe ? " (you)" : ""}</b><span class="muted">${detail(r)}</span></span>
-      <span class="tasks"><b>${main(r).n}</b><span class="muted">${main(r).unit}</span></span>
+      <span class="rank-badge ${r.rank <= 3 ? `r${r.rank}` : ""}">${r.rank}</span>
+      ${avatar(r.name)}
+      <span class="who">
+        <b>${esc(r.name)}${r.isMe ? ` <span class="you">You</span>` : ""}</b>
+        <span class="muted">${detail(r)}</span>
+        <span class="lb-bar" aria-hidden="true"><i style="width:${Math.max(4, fill(r))}%"></i></span>
+      </span>
+      <span class="score"><b>${value(r)}</b><span class="muted">${unit(r)}</span></span>
     </li>`;
-  const tab = (href, on, label) =>
-    `<a role="tab" href="${href}" class="${on ? "on" : ""}" aria-selected="${on}">${label}</a>`;
-  const top3 = lb.rows.slice(0, 3);
+
+  const step = (r, place) => r ? `
+    <div class="step s${place}">
+      <div class="step-person">
+        <span class="avatar-wrap">${avatar(r.name, "lg")}<span class="medal-badge">${["🥇", "🥈", "🥉"][place - 1]}</span></span>
+        <b>${esc(r.name)}</b>
+        <span class="step-value">${value(r)} <span class="muted">${byRel ? "reliability" : r.tasks === 1 ? "task" : "tasks"}</span></span>
+      </div>
+      <div class="block">${place}</div>
+    </div>` : `<div class="step s${place} empty"><div class="block">${place}</div></div>`;
+
+  const [first, second, third] = lb.rows;
+  const chip = (s, label, icon) =>
+    `<a href="${link(circle.id, leadersRange, s)}" class="chip-link ${leadersSort === s ? "on" : ""}" aria-pressed="${leadersSort === s}">${icon} ${label}</a>`;
 
   app.innerHTML = `
     <h1>Leaderboard</h1>
@@ -1218,25 +1243,22 @@ async function leaders(circleId, range, sort) {
     ${circles.length > 1 ? `
       <label class="field"><span>Neighborhood</span>
         <select id="lb-circle">${circles.map((c) => `<option value="${esc(c.id)}" ${c.id === circle.id ? "selected" : ""}>${esc(c.name)}</option>`).join("")}</select></label>` : ""}
-    <div class="segmented" role="tablist" aria-label="Time range">
-      ${tab(link(circle.id, "month"), leadersRange === "month", "This month")}
-      ${tab(link(circle.id, "all"), leadersRange === "all", "All time")}
-    </div>
-    <div class="sort-row">
-      <span class="muted">Sort by</span>
-      <div class="segmented small" role="tablist" aria-label="Sort by">
-        ${tab(link(circle.id, leadersRange, "tasks"), !byRel, "Tasks completed")}
-        ${tab(link(circle.id, leadersRange, "reliability"), byRel, "Reliability")}
+    <div class="lb-controls">
+      <div class="segmented" role="tablist" aria-label="Time range">
+        <a role="tab" href="${link(circle.id, "month")}" class="${leadersRange === "month" ? "on" : ""}" aria-selected="${leadersRange === "month"}">This month</a>
+        <a role="tab" href="${link(circle.id, "all")}" class="${leadersRange === "all" ? "on" : ""}" aria-selected="${leadersRange === "all"}">All time</a>
+      </div>
+      <div class="sort-chips" role="group" aria-label="Sort by">
+        <span class="muted">Sort by</span>
+        ${chip("tasks", "Tasks", "✓")}
+        ${chip("reliability", "Reliability", "★")}
       </div>
     </div>
 
     ${lb.rows.length ? `
-      ${top3.length === 3 ? `
-        <div class="podium" aria-hidden="true">
-          ${[top3[1], top3[0], top3[2]].map((r) => `
-            <div class="p${r.rank}"><span class="medal">${medal(r.rank)}</span><b>${esc(r.name)}</b>
-              <span class="n">${main(r).n}</span><span class="muted">${byRel ? "reliability" : "tasks"}</span></div>`).join("")}
-        </div>` : ""}
+      <div class="podium2" aria-label="Top three">
+        ${step(second, 2)}${step(first, 1)}${step(third, 3)}
+      </div>
       <div class="card lb-card"><ol class="lb">${lb.rows.map(row).join("")}</ol></div>
       ${lb.me ? `
         <p class="muted" style="margin:14px 0 6px">Your spot</p>
@@ -1246,11 +1268,11 @@ async function leaders(circleId, range, sort) {
         <p>Nobody's finished a task here ${leadersRange === "month" ? "this month" : "yet"}. Help a neighbor to get on the board!</p>
         <a class="btn primary" href="#/board">See who needs help</a></div>`}
 
-    <p class="muted" style="margin-top:16px">
+    <p class="muted lb-note">
       ${byRel
-        ? `Ranked by reliability score (out of 100); ties go to whoever completed more tasks. Everyone shown helped ${leadersRange === "month" ? "at least once this month" : "at least once"}.`
+        ? "Ranked by reliability score; ties go to whoever completed more tasks."
         : "Ranked by tasks completed; ties go to the higher reliability score."}
-      To keep it fair, only 2 tasks for the same neighbor in a month count. Only people who've helped are shown.</p>`;
+      Only people who've helped are shown, and only 2 tasks for the same neighbor in a month count, to keep it fair.</p>`;
 
   $("#lb-circle")?.addEventListener("change", (e) => (location.hash = link(e.target.value)));
 }

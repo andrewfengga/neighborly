@@ -376,25 +376,87 @@ dialog::backdrop { background: rgb(0 0 0 / .4); }
 @media (max-width: 420px) { .timeline li { grid-template-columns: 22px 1fr; } .timeline time { grid-column: 2; } }
 
 /* ---------- leaderboard ---------- */
+:root {
+  --gold: #f2c75c; --gold-ink: #6b4a00;
+  --silver: #d5dae1; --silver-ink: #3f4752;
+  --bronze: #e8b088; --bronze-ink: #6b3613;
+  --av-1: #dbe8fb; --av-2: #fde3d6; --av-3: #d6f2e6; --av-4: #fbeccb; --av-5: #f7dbe8; --av-6: #e3def8;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --gold: #b8902e; --gold-ink: #fff4d6;
+    --silver: #6d7480; --silver-ink: #f1f3f6;
+    --bronze: #a8653b; --bronze-ink: #fde9dc;
+    --av-1: #23395a; --av-2: #55301f; --av-3: #1d4635; --av-4: #4e3d12; --av-5: #4d2537; --av-6: #352c5c;
+  }
+}
+:root[data-theme="dark"] {
+  --gold: #b8902e; --gold-ink: #fff4d6; --silver: #6d7480; --silver-ink: #f1f3f6; --bronze: #a8653b; --bronze-ink: #fde9dc;
+  --av-1: #23395a; --av-2: #55301f; --av-3: #1d4635; --av-4: #4e3d12; --av-5: #4d2537; --av-6: #352c5c;
+}
+
+.lb-controls { display: grid; gap: 10px; margin-bottom: 18px; }
+.lb-controls .segmented { margin: 0; }
+.sort-chips { display: flex; align-items: center; gap: 8px; }
+.sort-chips .muted { margin-right: 2px; }
+.chip-link {
+  display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 999px;
+  border: 1px solid var(--border); background: var(--surface); color: var(--ink-2);
+  font-size: 14px; font-weight: 600; text-decoration: none; min-height: 36px;
+}
+.chip-link.on { background: var(--ink); border-color: var(--ink); color: var(--bg); }
+
+.avatar {
+  flex: none; display: inline-grid; place-items: center; width: 38px; height: 38px; border-radius: 50%;
+  font-weight: 700; font-size: 14px; color: var(--ink); letter-spacing: .02em;
+}
+.avatar.lg { width: 58px; height: 58px; font-size: 19px; border: 3px solid var(--surface); box-shadow: 0 2px 8px rgb(0 0 0 / .08); }
+.av-1 { background: var(--av-1); } .av-2 { background: var(--av-2); } .av-3 { background: var(--av-3); }
+.av-4 { background: var(--av-4); } .av-5 { background: var(--av-5); } .av-6 { background: var(--av-6); }
+
+/* podium: 2nd · 1st · 3rd, each standing on a step */
+.podium2 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; align-items: end; margin: 4px 0 16px; }
+.step { display: flex; flex-direction: column; align-items: center; min-width: 0; }
+.step-person { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 0 2px 8px; text-align: center; min-width: 0; max-width: 100%; }
+.step-person b { font-size: 14px; margin-top: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.step-value { font: 600 20px/1.1 Fraunces, Georgia, serif; }
+.step-value .muted { font: 500 11.5px Inter, system-ui, sans-serif; }
+.avatar-wrap { position: relative; }
+.medal-badge { position: absolute; right: -6px; bottom: -6px; font-size: 22px; line-height: 1; }
+.step .block {
+  width: 100%; display: grid; place-items: center; border-radius: 12px 12px 4px 4px;
+  font: 600 26px/1 Fraunces, Georgia, serif;
+}
+.s1 .block { height: 92px; background: var(--gold); color: var(--gold-ink); }
+.s2 .block { height: 66px; background: var(--silver); color: var(--silver-ink); }
+.s3 .block { height: 48px; background: var(--bronze); color: var(--bronze-ink); }
+.s1 .avatar.lg { width: 66px; height: 66px; font-size: 21px; }
+.step.empty .block { opacity: .35; }
+
+/* ranked list */
+.lb-card { padding: 0; overflow: hidden; }
 .lb { list-style: none; margin: 0; padding: 0; }
 .lb li {
-  display: grid; grid-template-columns: 40px 1fr auto; gap: 10px; align-items: center;
-  padding: 12px 14px; border-bottom: 1px solid var(--border);
+  display: grid; grid-template-columns: 28px 38px 1fr auto; gap: 12px; align-items: center;
+  padding: 12px 16px; border-bottom: 1px solid var(--border);
 }
 .lb li:last-child { border-bottom: 0; }
-.lb .rank { font: 600 18px/1 Fraunces, Georgia, serif; text-align: center; color: var(--ink-3); }
-.lb .medal { font-size: 24px; line-height: 1; }
-.lb .who b { display: block; }
-.lb .tasks { text-align: right; font-variant-numeric: tabular-nums; }
-.lb .tasks b { font: 600 22px/1 Fraunces, Georgia, serif; display: block; }
-.lb li.me { background: var(--brand-soft); }
-.lb-card { padding: 0; overflow: hidden; }
-.podium { display: grid; grid-template-columns: 1fr 1.15fr 1fr; gap: 8px; align-items: end; margin: 6px 0 14px; }
-.podium div { text-align: center; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 6px; }
-.podium .p1 { padding-top: 20px; border-color: color-mix(in srgb, #e3b341 55%, var(--border)); }
-.podium .medal { font-size: 30px; display: block; }
-.podium b { display: block; margin-top: 4px; font-size: 14px; }
-.podium span.n { font: 600 20px/1.2 Fraunces, Georgia, serif; display: block; }
-.sort-row { display: flex; align-items: center; gap: 10px; margin: 10px 0 4px; }
-.sort-row .segmented { flex: 1; margin: 0; }
-.segmented.small a { min-height: 36px; font-size: 13.5px; }
+.lb li.me { background: var(--brand-soft); box-shadow: inset 4px 0 0 var(--brand); }
+.rank-badge {
+  display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%;
+  font-weight: 700; font-size: 13px; color: var(--ink-3); background: var(--surface-2);
+}
+.rank-badge.r1 { background: var(--gold); color: var(--gold-ink); }
+.rank-badge.r2 { background: var(--silver); color: var(--silver-ink); }
+.rank-badge.r3 { background: var(--bronze); color: var(--bronze-ink); }
+.lb .who { min-width: 0; }
+.lb .who b { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lb .who .muted { display: block; font-size: 12.5px; }
+.you { font-size: 11px; font-weight: 700; color: var(--brand-ink); background: var(--brand); padding: 1px 7px; border-radius: 999px; vertical-align: 2px; margin-left: 4px; }
+.lb-bar { display: block; height: 5px; margin-top: 6px; background: var(--surface-2); border-radius: 3px; overflow: hidden; }
+.lb-bar i { display: block; height: 100%; background: var(--brand); border-radius: 0 3px 3px 0; }
+.lb .score { text-align: right; font-variant-numeric: tabular-nums; }
+.lb .score b { display: block; font: 600 22px/1 Fraunces, Georgia, serif; }
+.lb .score .muted { font-size: 11.5px; }
+.lb-note { margin-top: 16px; }
+@media (max-width: 380px) { .lb li { grid-template-columns: 26px 1fr auto; } .lb li .avatar { display: none; } }
