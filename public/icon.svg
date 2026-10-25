@@ -1,6 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" rx="16" fill="#2f6f4f"/>
-  <path d="M14 34 L26 23 L38 34 V48 H14 Z" fill="#fbfaf7"/>
-  <path d="M30 30 L40 21 L50 30 V48 H38 V34 Z" fill="#cfe5d6"/>
-  <circle cx="32" cy="15" r="4" fill="#f2b84b"/>
+  <!-- Neighborly: two homes side by side, a heart on the door, morning sun. -->
+  <rect width="64" height="64" rx="15" fill="#2f6f4f"/>
+  <circle cx="48.5" cy="15.5" r="4.5" fill="#f2b84b"/>
+  <!-- back house (mint), partly behind the front one -->
+  <path d="M30 31.5 L41.5 21 L53 31.5 V50 H30 Z" fill="#cfe5d6" stroke="#cfe5d6" stroke-width="2" stroke-linejoin="round"/>
+  <rect x="44" y="35" width="5" height="5" rx="1.2" fill="#2f6f4f" opacity=".55"/>
+  <!-- front house (cream), with a green outline that separates it from the back one -->
+  <path d="M10 30 L24.5 17 L39 30 V50 H10 Z" fill="#fbfaf7" stroke="#2f6f4f" stroke-width="3" stroke-linejoin="round" paint-order="stroke"/>
+  <!-- heart on the door -->
+  <path d="M24.5 46.5 C24.5 46.5 18.6 42.6 18.6 38.9 A2.95 2.95 0 0 1 24.5 37.4 A2.95 2.95 0 0 1 30.4 38.9 C30.4 42.6 24.5 46.5 24.5 46.5 Z" fill="#2f6f4f"/>
+  <!-- ground -->
+  <rect x="8" y="49.5" width="48" height="2.5" rx="1.25" fill="#fbfaf7" opacity=".9"/>
 </svg>

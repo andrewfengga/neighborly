@@ -88,7 +88,7 @@ function bucketsFor(method, pathname) {
 // ---------- static files ----------
 // Only public/ and the shared engine in src/ are served.
 
-const TYPES = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml", ".json": "application/json" };
+const TYPES = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml", ".png": "image/png", ".json": "application/json" };
 
 function serveStatic(req, res) {
   const url = new URL(req.url, "http://x");
