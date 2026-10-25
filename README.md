@@ -14,7 +14,7 @@ Requires Node 20+. No other dependencies.
 ```bash
 npm run demo:web     # sample data + a user switcher, resets on every start
 npm start            # real pilot data, saved in data/db.json
-npm test             # 76 tests
+npm test             # 84 tests
 ```
 
 Open http://localhost:3000. In demo mode, pick a person on the first screen, or switch
@@ -66,6 +66,7 @@ under-18 safety rule").
 ### 3. Trust and safety
 | Risk | Design |
 |---|---|
+| Account takeover | Username + password login. Passwords are hashed with scrypt and a per-person salt, never stored or sent back. Wrong usernames and wrong passwords get the same message and take the same time. Login attempts are limited per network and per username. |
 | Strangers | No open neighborhoods. You get in with an invite key from a member, or an organizer approves you. Private neighborhoods never appear in search. Leaked key? The organizer makes a new one, and the old one stops working. |
 | Minors | Under-18 members need a guardian contact, and they can only help **at the door or outside**: never inside a home or in a car. Enforced at sign-up, on the board, and again when they accept, so a direct API call can't get around it. |
 | Exact addresses | Locations are rounded to about half a mile **on the phone, before they're sent**, and the board shows only a distance. Exact details are shown **only to the one volunteer who accepts**. |

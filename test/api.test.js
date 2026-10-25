@@ -18,7 +18,10 @@ const fresh = () => {
 };
 const query = (params) => new URLSearchParams(params);
 const newPerson = (db, extra = {}) => {
-  const { token } = api.signup(db, { name: "Sam Lee", location: { lat: 34.08, lng: -84.29 }, ...extra }, now);
+  const { token } = api.signup(db, {
+    name: "Sam Lee", username: `sam${db.people.length}`, password: "correct horse",
+    location: { lat: 34.08, lng: -84.29 }, ...extra,
+  }, now);
   return api.personByToken(db, token);
 };
 
@@ -306,7 +309,7 @@ test("sign-up for a minor needs a guardian name AND a real phone number", () => 
   const { db } = fresh();
   assert.throws(() => api.signup(db, { name: "A", isMinor: true, guardianName: "Mom" }, now), /guardian/);
   assert.throws(() => api.signup(db, { name: "A", isMinor: true, guardianName: "Mom", guardianPhone: "nope" }, now), /phone number/);
-  const { token } = api.signup(db, { name: "A", isMinor: true, guardianName: "Dana Lee", guardianPhone: "(555) 444-1212" }, now);
+  const { token } = api.signup(db, { name: "A", isMinor: true, guardianName: "Dana Lee", guardianPhone: "(555) 444-1212", username: "dana_kid", password: "password123" }, now);
   assert.equal(api.personByToken(db, token).guardianContact, "Dana Lee: (555) 444-1212");
 });
 
@@ -420,4 +423,47 @@ test("minors can sign up for 'Other' and the new weekday/weekend slots", () => {
   const { db, maya } = fresh();
   api.updateProfile(db, maya, { skills: ["groceries", "other"], slots: ["weekday_mornings", "weekend_anytime"] });
   assert.deepEqual(maya.slots, ["weekday_mornings", "weekend_anytime"]);
+});
+
+// ---------- usernames & passwords ----------
+
+test("sign-up needs a valid, unique username and an 8+ character password", () => {
+  const { db } = fresh();
+  const base = { name: "Kim", password: "longenough" };
+  assert.throws(() => api.signup(db, { ...base, username: "a" }, now), /3–20 characters/);
+  assert.throws(() => api.signup(db, { ...base, username: "has space" }, now), /3–20 characters/);
+  assert.throws(() => api.signup(db, { ...base, username: "kim", password: "short" }, now), /at least 8/);
+  assert.throws(() => api.signup(db, { ...base, username: "MAYA" }, now), /taken/, "usernames ignore case");
+  assert.ok(api.signup(db, { ...base, username: "Kim.Lee" }, now).token);
+});
+
+test("log in with username and password; wrong ones get the same message", () => {
+  const { db, maya } = fresh();
+  assert.equal(api.login(db, { username: "Maya", password: "neighborly" }).token, maya.token);
+  assert.throws(() => api.login(db, { username: "maya", password: "wrong-password" }), /Wrong username or password/);
+  assert.throws(() => api.login(db, { username: "nobody", password: "neighborly" }), /Wrong username or password/);
+});
+
+test("passwords are hashed, salted, and never sent back", () => {
+  const { db, maya, tom } = fresh();
+  assert.ok(maya.passwordHash.startsWith("scrypt$"));
+  assert.ok(!maya.passwordHash.includes("neighborly"));
+  const sam = newPerson(db);
+  const kim = newPerson(db);
+  assert.notEqual(sam.passwordHash, kim.passwordHash, "same password, different salt, different hash");
+  const json = JSON.stringify(api.me(db, tom, {}, now));
+  assert.ok(!json.includes("scrypt") && !json.includes(tom.token));
+  assert.equal(api.me(db, tom, {}, now).person.hasPassword, true);
+});
+
+test("older accounts can add a username and password; changing it needs the current one", () => {
+  const { db } = fresh();
+  const old = newPerson(db);
+  delete old.username;
+  delete old.passwordHash;
+  api.setCredentials(db, old, { username: "oldtimer", password: "brand new pw" });
+  assert.equal(api.login(db, { username: "oldtimer", password: "brand new pw" }).token, old.token);
+  assert.throws(() => api.setCredentials(db, old, { currentPassword: "nope", password: "another pw" }), /current password/);
+  api.setCredentials(db, old, { currentPassword: "brand new pw", password: "another pw" });
+  assert.ok(api.login(db, { username: "oldtimer", password: "another pw" }));
 });

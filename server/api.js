@@ -204,6 +204,67 @@ function phoneField(value, field) {
   return s;
 }
 
+// ---------- usernames & passwords ----------
+// Passwords are never stored. We keep a scrypt hash with a random salt per
+// person ("scrypt$<salt>$<hash>"), and compare in constant time.
+
+const USERNAME = /^[a-z0-9_.]{3,20}$/;
+const MIN_PASSWORD = 8;
+
+function cleanUsername(value) {
+  const u = String(value ?? "").trim().toLowerCase();
+  if (!USERNAME.test(u)) fail("Usernames are 3–20 characters: letters, numbers, _ or .");
+  return u;
+}
+
+function checkPassword(value) {
+  const p = String(value ?? "");
+  if (p.length < MIN_PASSWORD) fail(`Passwords need at least ${MIN_PASSWORD} characters`);
+  if (p.length > 200) fail("That password is too long");
+  return p;
+}
+
+export function hashPassword(password) {
+  const salt = crypto.randomBytes(16);
+  const hash = crypto.scryptSync(password, salt, 32);
+  return `scrypt$${salt.toString("base64")}$${hash.toString("base64")}`;
+}
+
+function passwordMatches(password, stored) {
+  const [scheme, salt, hash] = String(stored ?? "").split("$");
+  if (scheme !== "scrypt" || !salt || !hash) return false;
+  const expected = Buffer.from(hash, "base64");
+  const actual = crypto.scryptSync(String(password ?? ""), Buffer.from(salt, "base64"), expected.length);
+  return crypto.timingSafeEqual(actual, expected);
+}
+
+const usernameTaken = (db, username, exceptId = null) =>
+  db.people.some((p) => p.username === username && p.id !== exceptId);
+
+// A real-looking hash to compare against when the username doesn't exist, so a
+// wrong username takes as long as a wrong password (no guessing who has accounts).
+const DECOY_HASH = hashPassword(crypto.randomBytes(16).toString("hex"));
+
+export function login(db, body) {
+  const username = String(body.username ?? "").trim().toLowerCase();
+  const person = db.people.find((p) => p.username === username && !p.background);
+  const ok = passwordMatches(body.password, person?.passwordHash ?? DECOY_HASH);
+  if (!person || !ok) fail("Wrong username or password", 401);
+  return { token: person.token };
+}
+
+/** Add a username + password to an older account, or change the password. */
+export function setCredentials(db, person, body) {
+  if (person.passwordHash && !passwordMatches(body.currentPassword, person.passwordHash)) {
+    fail("Your current password isn't right");
+  }
+  const username = person.username ?? cleanUsername(body.username);
+  if (!person.username && usernameTaken(db, username, person.id)) fail("That username is taken");
+  person.username = username;
+  person.passwordHash = hashPassword(checkPassword(body.password));
+  return { username };
+}
+
 // ---------- account ----------
 
 export function signup(db, body, now) {
@@ -215,10 +276,15 @@ export function signup(db, body, now) {
   if (isMinor && (!guardianName || !guardianPhone)) {
     fail("Members under 18 need a parent or guardian's name and phone number");
   }
+  const username = cleanUsername(body.username);
+  if (usernameTaken(db, username)) fail("That username is taken. Try another one.");
+  const passwordHash = hashPassword(checkPassword(body.password));
 
   const person = {
     id: makeId("p"),
     token: crypto.randomBytes(24).toString("hex"),
+    username,
+    passwordHash,
     name,
     isMinor,
     guardianName: guardianName || null,
@@ -238,7 +304,8 @@ export function signup(db, body, now) {
 }
 
 export function me(db, person, { demo }, now) {
-  const { token, ...rest } = person;
+  const { token, passwordHash, ...rest } = person;
+  rest.hasPassword = Boolean(passwordHash);
   const circles = db.memberships
     .filter((m) => m.personId === person.id && (m.status === "active" || m.status === "pending"))
     .map((m) => {

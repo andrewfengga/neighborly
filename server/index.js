@@ -54,6 +54,8 @@ const SECURITY_HEADERS = {
 
 const LIMITS = {
   signup: { max: 10, windowMs: 60 * 60e3 }, // new accounts per hour
+  login: { max: 10, windowMs: 10 * 60e3 }, // login tries per 10 minutes
+  loginUser: { max: 20, windowMs: 60 * 60e3 }, // login tries per username per hour
   key: { max: 20, windowMs: 10 * 60e3 }, // invite-key tries per 10 minutes
   write: { max: 120, windowMs: 60e3 }, // any change per minute
   upload: { max: 10, windowMs: 60 * 60e3 }, // appeals with photos per hour
@@ -80,6 +82,7 @@ function bucketsFor(method, pathname) {
   if (method === "GET" && pathname !== "/api/circles/preview") return [];
   const buckets = method === "GET" ? [] : ["write"];
   if (pathname === "/api/signup") buckets.push("signup");
+  if (pathname === "/api/login" || pathname === "/api/me/credentials") buckets.push("login");
   if (pathname === "/api/appeals") buckets.push("upload");
   if (pathname === "/api/circles/join" || pathname === "/api/circles/preview") buckets.push("key");
   return buckets;
@@ -134,6 +137,14 @@ const route = (spec, handler, needsAuth = true, writes = false) => {
 const routes = [
   // account
   route("POST /api/signup", (c) => api.signup(db, c.body, c.now), false, true),
+  route("POST /api/login", (c) => {
+    // Also limit by username, so one account can't be guessed from many networks.
+    if (overLimit(String(c.body.username ?? "").toLowerCase(), "loginUser")) {
+      throw new api.ApiError("Too many tries for this account. Wait a few minutes and try again.", 429);
+    }
+    return api.login(db, c.body);
+  }, false),
+  route("PUT /api/me/credentials", (c) => api.setCredentials(db, c.me, c.body), true, true),
   route("GET /api/me", (c) => api.me(db, c.me, { demo: DEMO }, c.now)),
   route("PUT /api/me", (c) => api.updateProfile(db, c.me, c.body), true, true),
 

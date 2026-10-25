@@ -3,6 +3,10 @@
 // never confused with real pilot results.
 
 import { emptyDb } from "./store.js";
+import { hashPassword } from "./api.js";
+
+// Every demo person can log in with their first name and this password.
+export const DEMO_PASSWORD = "neighborly";
 
 // Rough, rounded spots (never real homes) around the sample neighborhoods.
 const SPOT = {
@@ -42,8 +46,10 @@ export function seedDemo(now = new Date()) {
   );
 
   // ---------- people ----------
+  const demoHash = hashPassword(DEMO_PASSWORD);
   const person = (id, name, location, extra) => ({
-    id, token: `demo-${id}`, name, isMinor: false, guardianContact: null, location,
+    id, token: `demo-${id}`, username: extra?.background ? null : name.split(" ")[0].toLowerCase(),
+    passwordHash: extra?.background ? null : demoHash, name, isMinor: false, guardianContact: null, location,
     volunteering: false, skills: [], slots: [], maxDistanceMiles: 2, history: [], joinedAt: d(-30), ...extra,
   });
   const done = (daysAgo) => ({ outcome: "completed", at: d(-daysAgo) });

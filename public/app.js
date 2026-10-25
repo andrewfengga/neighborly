@@ -205,14 +205,6 @@ async function route() {
   clearInterval(pollTimer);
   const [name = "board", ...args] = location.hash.replace(/^#\/?/, "").split("/").map(decodeURIComponent);
 
-  // #/signin/TOKEN: a private sign-in link. Take the token, then scrub it from the address bar.
-  if (name === "signin" && args[0]) {
-    token = args[0];
-    storage.set("neighborly.token", token);
-    me = null;
-    history.replaceState(null, "", "/#/board");
-    return route();
-  }
   if (!token) {
     if (name === "join" && args[0]) pendingInviteKey = args[0];
     return renderWelcome();
@@ -306,15 +298,36 @@ async function renderWelcome() {
       <h1>Small help, from neighbors you trust</h1>
       <p class="lede">Groceries, yard work, a ride, a tech fix. Neighborly matches each request with the neighbor best placed to help right now.</p>
     </div>
-    ${invitedTo ? `<div class="notice good">You've been invited to <b>${esc(invitedTo.name)}</b> in ${esc(invitedTo.city)}, ${esc(invitedTo.state)}. Create your account and you'll join right away.</div>` : `
+    ${invitedTo ? `<div class="notice good">You've been invited to <b>${esc(invitedTo.name)}</b> in ${esc(invitedTo.city)}, ${esc(invitedTo.state)}. Create an account or log in, and you'll join right away.</div>` : `
     <div class="how">
       <div><span class="n">1</span><span><b>Start or join a neighborhood.</b> Your street, church, school club, or troop. Nobody gets in without the group's say-so.</span></div>
       <div><span class="n">2</span><span><b>Ask in one sentence.</b> "Need help carrying groceries in Saturday morning."</span></div>
       <div><span class="n">3</span><span><b>The right helper sees it first.</b> Ranked by urgency, distance, and skills, with the reason shown.</span></div>
     </div>`}
+    <div class="segmented" role="tablist" style="margin-bottom:12px">
+      <a role="tab" href="#" id="tab-signup" class="on" aria-selected="true">Create account</a>
+      <a role="tab" href="#" id="tab-login" aria-selected="false">Log in</a>
+    </div>
+    <form class="card" id="login-form" hidden>
+      <h3>Welcome back</h3>
+      <label class="field"><span>Username</span>
+        <input type="text" name="username" required autocomplete="username" autocapitalize="none" spellcheck="false"></label>
+      <label class="field"><span>Password</span>
+        <input type="password" name="password" required autocomplete="current-password"></label>
+      <button class="btn primary block">Log in</button>
+      ${demoPeople.length ? `<p class="muted" style="margin:10px 0 0">Demo accounts: use a first name (like <b>maya</b> or <b>priya</b>) and the password <b>neighborly</b>.</p>` : ""}
+    </form>
     <form class="card" id="signup-form">
       <h3>Create your account</h3>
       <label class="field"><span>Your name</span><input type="text" name="name" maxlength="40" required autocomplete="name"></label>
+      <div class="grid2">
+        <label class="field"><span>Username</span>
+          <input type="text" name="username" required minlength="3" maxlength="20" pattern="[A-Za-z0-9_.]{3,20}"
+            autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="e.g. maya_p"></label>
+        <label class="field"><span>Password</span>
+          <input type="password" name="password" required minlength="8" autocomplete="new-password" placeholder="8+ characters"></label>
+      </div>
+      <p class="muted" style="margin:-8px 0 14px">Use these to log in on any phone or computer.</p>
       <div class="field"><span class="label">Where you are</span>
         <button type="button" class="btn block" id="loc-btn">📍 Use my location</button>
         <input type="hidden" name="location" id="loc-val">
@@ -344,6 +357,28 @@ async function renderWelcome() {
     $("#guardian").hidden = !e.target.checked;
     document.querySelectorAll("#guardian input").forEach((i) => (i.required = e.target.checked));
   };
+  const showForm = (which) => {
+    $("#signup-form").hidden = which !== "signup";
+    $("#login-form").hidden = which !== "login";
+    $("#tab-signup").classList.toggle("on", which === "signup");
+    $("#tab-login").classList.toggle("on", which === "login");
+    $("#tab-signup").setAttribute("aria-selected", which === "signup");
+    $("#tab-login").setAttribute("aria-selected", which === "login");
+  };
+  $("#tab-signup").onclick = (e) => { e.preventDefault(); showForm("signup"); };
+  $("#tab-login").onclick = (e) => { e.preventDefault(); showForm("login"); };
+
+  $("#login-form").onsubmit = async (e) => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    try {
+      const res = await api("/api/login", { method: "POST", body: { username: f.get("username"), password: f.get("password") } });
+      await signedIn(res.token, "#/board");
+    } catch (err) {
+      toast(err.message, true);
+    }
+  };
+
   $("#signup-form").onsubmit = async (e) => {
     e.preventDefault();
     const f = new FormData(e.target);
@@ -351,6 +386,8 @@ async function renderWelcome() {
       const res = await api("/api/signup", {
         method: "POST",
         body: {
+          username: f.get("username"),
+          password: f.get("password"),
           name: f.get("name"),
           location: f.get("location") ? JSON.parse(f.get("location")) : null,
           isMinor: f.get("isMinor") === "on",
@@ -358,26 +395,33 @@ async function renderWelcome() {
           guardianPhone: f.get("guardianPhone"),
         },
       });
-      token = res.token;
-      storage.set("neighborly.token", token);
-      if (pendingInviteKey) {
-        const joined = await api("/api/circles/join", { method: "POST", body: { key: pendingInviteKey } }).catch((err) => {
-          toast(err.message, true);
-          return null;
-        });
-        pendingInviteKey = null;
-        if (joined) {
-          toast(`Welcome to ${joined.name}!`);
-          location.hash = `#/hoods/${joined.id}`;
-          return route();
-        }
-      }
-      location.hash = "#/hoods";
-      route();
+      await signedIn(res.token, "#/hoods");
     } catch (err) {
       toast(err.message, true);
     }
   };
+}
+
+/** After signing up or logging in: remember the session, and join the invited neighborhood if there is one. */
+async function signedIn(newToken, next) {
+  token = newToken;
+  storage.set("neighborly.token", token);
+  me = null;
+  if (pendingInviteKey) {
+    const joined = await api("/api/circles/join", { method: "POST", body: { key: pendingInviteKey } }).catch((err) => {
+      // Already a member is fine when logging back in.
+      if (!/already in/.test(err.message)) toast(err.message, true);
+      return null;
+    });
+    pendingInviteKey = null;
+    if (joined) {
+      toast(`Welcome to ${joined.name}!`);
+      location.hash = `#/hoods/${joined.id}`;
+      return route();
+    }
+  }
+  location.hash = next;
+  route();
 }
 
 /** #/join/KEY while signed in: confirm, then join. */
@@ -1390,13 +1434,42 @@ async function profile() {
       <button class="btn primary block">Save</button>
     </form>
 
-    <section class="card">
-      <h3>Use Neighborly on another device</h3>
-      <p class="small" style="color:var(--ink-2)">Your account lives in this browser. Save this private link (text it to yourself) to sign in on a new phone, or if you clear your browser.</p>
-      <div class="notice warn small">Anyone with this link can act as you. Don't share it.</div>
-      <button type="button" class="btn" data-action="copy-signin">Copy my sign-in link</button>
-    </section>
+    <form class="card" id="credentials-form">
+      ${p.hasPassword ? `
+        <h3>Login</h3>
+        <p class="small" style="color:var(--ink-2)">You log in as <b>@${esc(p.username)}</b>. To change your password, enter the current one first.</p>
+        <label class="field"><span>Current password</span>
+          <input type="password" name="currentPassword" required autocomplete="current-password"></label>
+        <label class="field"><span>New password</span>
+          <input type="password" name="password" required minlength="8" autocomplete="new-password" placeholder="8+ characters"></label>
+        <button class="btn block">Change password</button>` : `
+        <h3>Add a username and password</h3>
+        <div class="notice warn small">Right now your account only lives in this browser. Add a login so you can use Neighborly on any device, and don't lose it if this browser is cleared.</div>
+        <div class="grid2">
+          <label class="field"><span>Username</span>
+            <input type="text" name="username" required minlength="3" maxlength="20" pattern="[A-Za-z0-9_.]{3,20}"
+              autocomplete="username" autocapitalize="none" spellcheck="false"></label>
+          <label class="field"><span>Password</span>
+            <input type="password" name="password" required minlength="8" autocomplete="new-password" placeholder="8+ characters"></label>
+        </div>
+        <button class="btn primary block">Save login</button>`}
+    </form>
     ${me.demo ? "" : `<button class="btn block" data-action="signout">Sign out</button>`}`;
+
+  $("#credentials-form").onsubmit = async (e) => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    try {
+      await api("/api/me/credentials", {
+        method: "PUT",
+        body: { username: f.get("username"), password: f.get("password"), currentPassword: f.get("currentPassword") },
+      });
+      toast(p.hasPassword ? "Password changed" : "Login saved. You can now log in on any device.");
+      profile();
+    } catch (err) {
+      toast(err.message, true);
+    }
+  };
 
   const form = $("#profile-form");
   form.maxDistanceMiles.oninput = (e) => ($("#miles-out").textContent = e.target.value);
@@ -1637,10 +1710,6 @@ const actions = {
     const a = Object.assign(document.createElement("a"), { href: url, download: "neighborly-pilot.csv" });
     a.click();
     URL.revokeObjectURL(url);
-  },
-  async "copy-signin"() {
-    await navigator.clipboard.writeText(`${location.origin}/#/signin/${token}`);
-    toast("Sign-in link copied. Keep it private.");
   },
   signout: signOut,
 };
