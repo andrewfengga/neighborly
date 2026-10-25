@@ -170,7 +170,7 @@ function publicView(db, r) {
     circleName: circle?.name ?? "",
     taskType: r.taskType,
     taskLabel: TASK_TYPES[r.taskType].label,
-    setting: TASK_TYPES[r.taskType].setting,
+    setting: r.setting ?? TASK_TYPES[r.taskType].setting,
     description: r.description,
     window: r.window,
     housebound: r.housebound,
@@ -259,7 +259,8 @@ export function updateProfile(db, person, body) {
   const skills = Array.isArray(body.skills) ? body.skills : person.skills;
   for (const s of skills) {
     if (!TASK_TYPES[s]) fail(`Unknown skill: ${s}`);
-    if (person.isMinor && !MINOR_ALLOWED_SETTINGS.has(TASK_TYPES[s].setting)) {
+    // "other" has no fixed setting, so minors can opt in; each request is still checked.
+    if (person.isMinor && TASK_TYPES[s].setting && !MINOR_ALLOWED_SETTINGS.has(TASK_TYPES[s].setting)) {
       fail(`Under-18 members can't sign up for ${TASK_TYPES[s].label.toLowerCase()}`);
     }
   }
@@ -576,6 +577,7 @@ export function postRequest(db, person, body, now) {
     privateDetails,
     contactPhone,
     onBehalfOf,
+    setting: body.setting ?? null,
     createdAt: now,
   });
   store(db, request);
@@ -853,7 +855,7 @@ export function activityFeed(db, person, circleId, now) {
       return {
         id: r.id,
         taskLabel: TASK_TYPES[r.taskType].label,
-        setting: TASK_TYPES[r.taskType].setting,
+        setting: r.setting ?? TASK_TYPES[r.taskType].setting,
         description: r.description,
         onBehalfOf: r.onBehalfOf || "",
         status: r.status,

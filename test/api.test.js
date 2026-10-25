@@ -392,3 +392,32 @@ test("leaderboard: can sort by reliability instead of tasks", () => {
   for (let i = 1; i < byRel.length; i++) assert.ok(byRel[i - 1].reliability >= byRel[i].reliability);
   assert.equal(byRel.at(-1).name, "Tom R.", "Tom's no-show puts him last on reliability");
 });
+
+// ---------- "Other" kind of help ----------
+
+const postOther = (db, who, setting) => api.postRequest(db, who, {
+  circleId: "c_maple", taskType: "other", description: "Help me hang holiday lights", setting,
+  start: now.toISOString(), end: new Date(now.getTime() + 2 * 864e5).toISOString(),
+}, now);
+
+test("'Other' requests must say where they happen", () => {
+  const { db, rosa } = fresh();
+  assert.throws(() => postOther(db, rosa, null), /where this will happen/);
+  assert.throws(() => postOther(db, rosa, "on the moon"), /where this will happen/);
+});
+
+test("'Other' still follows the under-18 rules, based on where it happens", () => {
+  const { db, rosa, maya } = fresh();
+  const inside = postOther(db, rosa, "in_home").id;
+  const outside = postOther(db, rosa, "outdoor").id;
+  const board = api.board(db, maya, now).items.map((i) => i.request.id);
+  assert.ok(!board.includes(inside), "a minor never sees an 'other' task inside a home");
+  assert.ok(board.includes(outside));
+  assert.throws(() => api.act(db, maya, inside, "accept", now), /under-18/);
+});
+
+test("minors can sign up for 'Other' and the new weekday/weekend slots", () => {
+  const { db, maya } = fresh();
+  api.updateProfile(db, maya, { skills: ["groceries", "other"], slots: ["weekday_mornings", "weekend_anytime"] });
+  assert.deepEqual(maya.slots, ["weekday_mornings", "weekend_anytime"]);
+});

@@ -38,7 +38,7 @@ export function checkEligibility(volunteer, request, now = new Date()) {
     return { ok: false, reason: "different trust circle" };
   }
 
-  const setting = settingOf(request.taskType);
+  const setting = request.setting ?? settingOf(request.taskType);
   if (volunteer.isMinor && !MINOR_ALLOWED_SETTINGS.has(setting)) {
     return { ok: false, reason: `under-18 volunteers can't take ${setting} tasks` };
   }

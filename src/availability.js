@@ -4,12 +4,21 @@
 // Times are in the server's local time zone, which is fine for a pilot in
 // one neighborhood.
 
+const WEEKDAYS = [1, 2, 3, 4, 5];
+const WEEKEND = [0, 6];
+
+// Shown grouped (Weekdays / Weekends), in this order.
 export const SLOTS = {
-  anytime: { label: "Pretty much anytime", days: [0, 1, 2, 3, 4, 5, 6], from: 7, to: 21 },
-  weekday_afternoons: { label: "Weekday afternoons (3–7pm)", days: [1, 2, 3, 4, 5], from: 15, to: 19 },
-  weekday_evenings: { label: "Weekday evenings (6–9pm)", days: [1, 2, 3, 4, 5], from: 18, to: 21 },
-  weekend_mornings: { label: "Weekend mornings (8am–12pm)", days: [0, 6], from: 8, to: 12 },
-  weekend_afternoons: { label: "Weekend afternoons (12–6pm)", days: [0, 6], from: 12, to: 18 },
+  weekday_mornings: { group: "Weekdays", label: "Mornings (8am–12pm)", days: WEEKDAYS, from: 8, to: 12 },
+  weekday_afternoons: { group: "Weekdays", label: "Afternoons (12–5pm)", days: WEEKDAYS, from: 12, to: 17 },
+  weekday_evenings: { group: "Weekdays", label: "Evenings (5–9pm)", days: WEEKDAYS, from: 17, to: 21 },
+  weekday_anytime: { group: "Weekdays", label: "Pretty much anytime", days: WEEKDAYS, from: 8, to: 21 },
+  weekend_mornings: { group: "Weekends", label: "Mornings (8am–12pm)", days: WEEKEND, from: 8, to: 12 },
+  weekend_afternoons: { group: "Weekends", label: "Afternoons (12–5pm)", days: WEEKEND, from: 12, to: 17 },
+  weekend_evenings: { group: "Weekends", label: "Evenings (5–9pm)", days: WEEKEND, from: 17, to: 21 },
+  weekend_anytime: { group: "Weekends", label: "Pretty much anytime", days: WEEKEND, from: 8, to: 21 },
+  // Older accounts saved this before the split; still understood, not shown.
+  anytime: { hidden: true, label: "Pretty much anytime", days: [...WEEKEND, ...WEEKDAYS], from: 7, to: 21 },
 };
 
 /** Concrete windows for the next `daysAhead` days, starting today. */

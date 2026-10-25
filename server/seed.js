@@ -52,11 +52,11 @@ export function seedDemo(now = new Date()) {
     person("p_maya", "Maya Patel", SPOT.north, {
       isMinor: true, guardianName: "Anita Patel (mom)", guardianPhone: "(555) 010-2233",
       guardianContact: "Anita Patel (mom): (555) 010-2233",
-      volunteering: true, skills: ["groceries", "yard_work", "snow_leaves"], slots: ["anytime"],
+      volunteering: true, skills: ["groceries", "yard_work", "snow_leaves"], slots: ["weekday_anytime", "weekend_anytime"],
       history: [done(4), done(11), done(25)],
     }),
     person("p_tom", "Tom Reyes", SPOT.mill, {
-      volunteering: true, skills: ["tech_help", "ride", "moving"], slots: ["anytime"], maxDistanceMiles: 5,
+      volunteering: true, skills: ["tech_help", "ride", "moving"], slots: ["weekday_anytime", "weekend_anytime"], maxDistanceMiles: 5,
       history: [
         done(2), done(9), { outcome: "cancelled_late", at: d(-40) }, done(60), done(95),
         { outcome: "no_show", at: d(-2), requestId: "r_curb", requesterId: "p_chen" },

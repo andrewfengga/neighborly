@@ -2,7 +2,7 @@
 // It imports the same engine files the server uses (src/), so the quick-post
 // parser and reputation math the user sees are exactly what the server runs.
 
-import { TASK_TYPES, MINOR_ALLOWED_SETTINGS } from "/src/tasks.js";
+import { TASK_TYPES, MINOR_ALLOWED_SETTINGS, SETTINGS } from "/src/tasks.js";
 import { SLOTS } from "/src/availability.js";
 import { parseQuickPost } from "/src/parse.js";
 import { reputation, countedFlags, decayWeight, penaltyWeight, PENALTY, SAME_NEIGHBOR } from "/src/reputation.js";
@@ -976,6 +976,12 @@ function ask() {
             <option value="">Choose…</option>
             ${Object.entries(TASK_TYPES).map(([k, t]) => `<option value="${k}">${esc(t.label)}</option>`).join("")}
           </select></label>
+        <label class="field" id="setting-field" hidden><span>Where will this happen?</span>
+          <select name="setting" id="setting">
+            <option value="">Choose…</option>
+            ${Object.entries(SETTINGS).map(([k, label]) => `<option value="${k}">${esc(label)}</option>`).join("")}
+          </select>
+          <span class="muted" style="display:block;margin-top:5px;font-weight:400">This decides who can take it. Volunteers under 18 only help at the door or outside.</span></label>
         <div class="grid2">
           <label class="field"><span>Earliest</span><input type="datetime-local" name="start" id="start" value="${toLocalInput(now)}" required></label>
           <label class="field"><span>Latest (deadline)</span><input type="datetime-local" name="end" id="end" value="${toLocalInput(later)}" required></label>
@@ -1012,12 +1018,19 @@ function ask() {
   locationButton("#req-loc-btn", "#req-loc-val", "#req-loc-status");
   const touched = new Set();
   ["taskType", "start", "end", "housebound"].forEach((id) => $(`#${id}`).addEventListener("change", () => touched.add(id)));
+  const syncSetting = () => {
+    const other = $("#taskType").value === "other";
+    $("#setting-field").hidden = !other;
+    $("#setting").required = other;
+  };
+  $("#taskType").addEventListener("change", syncSetting);
 
   $("#q").addEventListener("input", (e) => {
     const text = e.target.value;
     if (!text.trim()) return ($("#understood").innerHTML = "");
     const parsed = parseQuickPost(text, new Date());
     if (parsed.taskType && !touched.has("taskType")) $("#taskType").value = parsed.taskType;
+    syncSetting();
     if (!touched.has("start")) $("#start").value = toLocalInput(parsed.window.start);
     if (!touched.has("end")) $("#end").value = toLocalInput(parsed.window.end);
     if (!touched.has("housebound")) $("#housebound").checked = parsed.housebound;
@@ -1042,6 +1055,7 @@ function ask() {
         method: "POST",
         body: {
           circleId: f.get("circleId"), description: f.get("description"), taskType: f.get("taskType"),
+          setting: f.get("taskType") === "other" ? f.get("setting") : null,
           start: start.toISOString(), end: end.toISOString(),
           housebound: f.get("housebound") === "on", privateDetails: f.get("privateDetails"),
           contactPhone: f.get("contactPhone"),
@@ -1345,12 +1359,20 @@ async function profile() {
       ${p.isMinor ? `<div class="notice warn small"><b>Under-18 safety rule:</b> you can help at the door or outside (groceries, yard work, leaves) but not inside someone's home or in a car. Guardian on file: ${esc(p.guardianContact)}</div>` : ""}
       <div class="field"><span class="label">What you're happy to do</span>
         <div class="chips">${Object.entries(TASK_TYPES).map(([k, t]) => {
-          const blocked = p.isMinor && !MINOR_ALLOWED_SETTINGS.has(t.setting);
+          // "Other" has no fixed setting, so it's never blocked here; each request is still checked.
+          const blocked = p.isMinor && t.setting && !MINOR_ALLOWED_SETTINGS.has(t.setting);
           return `<label class="chip"><input type="checkbox" name="skills" value="${k}" ${p.skills.includes(k) ? "checked" : ""} ${blocked ? "disabled" : ""}><span>${esc(t.label)}</span></label>`;
         }).join("")}</div></div>
       <div class="field" style="margin-top:16px"><span class="label">When you're usually free</span>
-        <div class="chips">${Object.entries(SLOTS).map(([k, s]) =>
-          `<label class="chip"><input type="checkbox" name="slots" value="${k}" ${p.slots.includes(k) ? "checked" : ""}><span>${esc(s.label)}</span></label>`).join("")}</div></div>
+        ${["Weekdays", "Weekends"].map((group) => `
+          <div class="slot-group">
+            <span class="slot-group-label">${group}</span>
+            <div class="chips">${Object.entries(SLOTS).filter(([, s]) => s.group === group).map(([k, s]) => {
+              // Older accounts saved one "anytime" slot; show it as anytime on both.
+              const on = p.slots.includes(k) || (k.endsWith("_anytime") && p.slots.includes("anytime"));
+              return `<label class="chip"><input type="checkbox" name="slots" value="${k}" ${on ? "checked" : ""}><span>${esc(s.label)}</span></label>`;
+            }).join("")}</div>
+          </div>`).join("")}</div>
       <label class="field" style="margin-top:16px"><span>How far you'll go: <output id="miles-out">${p.maxDistanceMiles}</output> mi</span>
         <input type="range" name="maxDistanceMiles" min="0.5" max="10" step="0.5" value="${p.maxDistanceMiles}" style="width:100%;accent-color:var(--brand)"></label>
       <div class="field"><span class="label">Your location</span>

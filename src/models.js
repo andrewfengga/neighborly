@@ -1,7 +1,7 @@
 // The two core objects: a help Request and a Volunteer.
 // Factory functions validate input so bad data fails loudly and early.
 
-import { TASK_TYPES } from "./tasks.js";
+import { TASK_TYPES, settingOf } from "./tasks.js";
 import { toNeighborhoodLevel } from "./geo.js";
 
 // Random ids, so they stay unique across server restarts.
@@ -28,6 +28,7 @@ export function createRequest({
   privateDetails = "",
   contactPhone = "",
   onBehalfOf = "",
+  setting = null, // only used for "other" tasks
   createdAt = new Date(),
 }) {
   if (!TASK_TYPES[taskType]) throw new Error(`Unknown task type: ${taskType}`);
@@ -40,6 +41,7 @@ export function createRequest({
     requesterId,
     circleId,
     taskType,
+    setting: settingOf(taskType, setting), // where it happens; drives the under-18 rules
     description,
     location: toNeighborhoodLevel(location), // never store the exact spot
     window,
