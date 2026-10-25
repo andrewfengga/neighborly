@@ -44,7 +44,7 @@ function has(text, words) {
 export function scopeCheck(text) {
   const hits = has(text.toLowerCase(), OUT_OF_SCOPE);
   return hits.length
-    ? { ok: false, reason: `"${hits[0]}" sounds like care that needs a professional. Neighborly is for everyday practical help only.` }
+    ? { ok: false, reason: `"${hits[0]}" sounds like something a professional should handle. Neighborly is just for everyday help.` }
     : { ok: true };
 }
 

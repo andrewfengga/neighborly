@@ -93,7 +93,7 @@ function getRoundedLocation() {
         lat: Math.round(p.coords.latitude * 100) / 100,
         lng: Math.round(p.coords.longitude * 100) / 100,
       }),
-      () => reject(new Error("Location is blocked. Allow it in your browser's site settings, then try again.")),
+      () => reject(new Error("Your browser blocked location. Turn it on in your browser settings and try again.")),
       { timeout: 10000, maximumAge: 600000 }
     );
   });
@@ -106,7 +106,7 @@ function locationButton(buttonSel, inputSel, statusSel) {
     try {
       const loc = await getRoundedLocation();
       $(inputSel).value = JSON.stringify(loc);
-      $(statusSel).innerHTML = `📍 Got it, rounded to about half a mile. Your exact address is never stored.`;
+      $(statusSel).innerHTML = `📍 Got it. We round it to about half a mile, so your address stays private.`;
     } catch (err) {
       $(statusSel).textContent = err.message;
     }
@@ -150,7 +150,7 @@ async function shareInvite(circle) {
     } catch { /* cancelled; fall through to copy */ }
   }
   await navigator.clipboard.writeText(text);
-  toast("Invite copied. Paste it in a text or group chat.");
+  toast("Invite copied. Paste it into a text or group chat.");
 }
 
 // ---------- formatting ----------
@@ -295,14 +295,14 @@ async function renderWelcome() {
   app.innerHTML = `
     <div class="welcome fadein">
       <img src="/icon.svg" alt="">
-      <h1>Small help, from neighbors you trust</h1>
-      <p class="lede">Groceries, yard work, a ride, a tech fix. Neighborly matches each request with the neighbor best placed to help right now.</p>
+      <h1>Get help from your neighbors</h1>
+      <p class="lede">Need a hand with groceries, yard work, or a ride? Ask on Neighborly and it goes to people nearby who can help.</p>
     </div>
-    ${invitedTo ? `<div class="notice good">You've been invited to <b>${esc(invitedTo.name)}</b> in ${esc(invitedTo.city)}, ${esc(invitedTo.state)}. Create an account or log in, and you'll join right away.</div>` : `
+    ${invitedTo ? `<div class="notice good">You've been invited to <b>${esc(invitedTo.name)}</b> in ${esc(invitedTo.city)}, ${esc(invitedTo.state)}. Make an account or log in to join.</div>` : `
     <div class="how">
-      <div><span class="n">1</span><span><b>Start or join a neighborhood.</b> Your street, church, school club, or troop. Nobody gets in without the group's say-so.</span></div>
-      <div><span class="n">2</span><span><b>Ask in one sentence.</b> "Need help carrying groceries in Saturday morning."</span></div>
-      <div><span class="n">3</span><span><b>The right helper sees it first.</b> Ranked by urgency, distance, and skills, with the reason shown.</span></div>
+      <div><span class="n">1</span><span><b>Join your neighborhood.</b> Or start one for your street, church, or club. Only people you let in can see your requests.</span></div>
+      <div><span class="n">2</span><span><b>Ask for help.</b> Just type what you need, like "Can someone help me carry groceries in on Saturday?"</span></div>
+      <div><span class="n">3</span><span><b>Someone nearby says yes.</b> Volunteers see the most urgent requests close to them first.</span></div>
     </div>`}
     <div class="segmented" role="tablist" style="margin-bottom:12px">
       <a role="tab" href="#" id="tab-signup" class="on" aria-selected="true">Create account</a>
@@ -327,21 +327,21 @@ async function renderWelcome() {
         <label class="field"><span>Password</span>
           <input type="password" name="password" required minlength="8" autocomplete="new-password" placeholder="8+ characters"></label>
       </div>
-      <p class="muted" style="margin:-8px 0 14px">Use these to log in on any phone or computer.</p>
+      <p class="muted" style="margin:-8px 0 14px">You'll use these to log in.</p>
       <div class="field"><span class="label">Where you are</span>
         <button type="button" class="btn block" id="loc-btn">📍 Use my location</button>
         <input type="hidden" name="location" id="loc-val">
-        <p class="muted" id="loc-status" style="margin:6px 0 16px">Used only to show how far requests are. It's rounded to about half a mile on your phone before it's sent.</p>
+        <p class="muted" id="loc-status" style="margin:6px 0 16px">We only use this to show how far away requests are. It's rounded to about half a mile, so your address is never saved.</p>
       </div>
       <label class="check"><input type="checkbox" name="isMinor" id="minor"><span>I'm under 18</span></label>
       <div id="guardian" class="guardian-box" hidden>
-        <p class="small" style="margin:0 0 10px">Under 18? We need a parent or guardian. Organizers can see this, and so can neighbors you help.</p>
+        <p class="small" style="margin:0 0 10px">Since you're under 18, we need a parent or guardian's info. Your organizer and the neighbors you help can see it.</p>
         <label class="field"><span>Parent/guardian name</span>
           <input type="text" name="guardianName" maxlength="60" autocomplete="off" placeholder="e.g. Anita Patel"></label>
         <label class="field" style="margin-bottom:0"><span>Parent/guardian phone</span>
           <input type="tel" name="guardianPhone" maxlength="25" autocomplete="off" placeholder="(555) 123-4567"></label>
       </div>
-      <label class="check"><input type="checkbox" required><span class="small">I understand Neighborly is for everyday practical help, not medical or personal care, and I'll use good judgment when meeting people.</span></label>
+      <label class="check"><input type="checkbox" required><span class="small">I get that Neighborly is for everyday help like errands and chores, not medical care, and I'll be smart about meeting people.</span></label>
       <button class="btn primary block">Get started</button>
     </form>
     ${demoPeople.length ? `
@@ -444,11 +444,11 @@ async function hoodList() {
   const mineList = me.circles;
   app.innerHTML = `
     <h1>Neighborhoods</h1>
-    <p class="lede">${mineList.length ? "Requests from every neighborhood you're in show up on your board." : "Start one for your street or group, or join one you've been invited to."}</p>
+    <p class="lede">${mineList.length ? "Requests from all your neighborhoods show up on your board." : "Start one for your street or group, or join one you were invited to."}</p>
     <div class="choice-grid">
-      <a class="choice" href="#/hoods/new"><span class="ico">＋</span><b>Create</b><span>Start one and invite people</span></a>
-      <a class="choice" href="#/hoods/join"><span class="ico">🔑</span><b>Join with key</b><span>Someone gave you a key</span></a>
-      <a class="choice" href="#/hoods/find"><span class="ico">🔎</span><b>Find nearby</b><span>Search and ask to join</span></a>
+      <a class="choice" href="#/hoods/new"><span class="ico">＋</span><b>Start one</b><span>Then invite people</span></a>
+      <a class="choice" href="#/hoods/join"><span class="ico">🔑</span><b>Join with a key</b><span>If someone sent you one</span></a>
+      <a class="choice" href="#/hoods/find"><span class="ico">🔎</span><b>Find one nearby</b><span>And ask to join</span></a>
     </div>
     ${mineList.length ? `<h2>Yours</h2>${mineList.map((c) => `
       <a class="card hood-card fadein" href="${c.status === "active" ? `#/hoods/${esc(c.id)}` : "#/hoods"}">
@@ -473,7 +473,7 @@ async function hoodCreate() {
   app.innerHTML = `
     <a class="back" href="#/hoods">‹ Neighborhoods</a>
     <h1>Create a neighborhood</h1>
-    <p class="lede">You'll be its organizer: you invite people, approve anyone who asks to join, and handle safety reports.</p>
+    <p class="lede">You'll be the organizer. You invite people, decide who gets in, and handle any problems.</p>
     <form class="card" id="create-form">
       <label class="field"><span>Name</span><input type="text" name="name" maxlength="60" required placeholder="e.g. Birch Court Neighbors"></label>
       <div class="grid3">
@@ -486,9 +486,9 @@ async function hoodCreate() {
 
       <div class="field"><span class="label">Who can get in?</span>
         <label class="radio-card"><input type="radio" name="visibility" value="private" checked>
-          <span><b>🔒 Private</b><br><span class="muted">Hidden from search. People join only with your invite key or link.</span></span></label>
+          <span><b>🔒 Private</b><br><span class="muted">Hidden from search. People can only join with your invite link.</span></span></label>
         <label class="radio-card"><input type="radio" name="visibility" value="listed">
-          <span><b>🔎 Listed</b><br><span class="muted">Neighbors can find it by searching and ask to join. You approve each person. Your invite key still works too.</span></span></label>
+          <span><b>🔎 Listed</b><br><span class="muted">People can find it and ask to join. You decide who gets in.</span></span></label>
       </div>
 
       <div class="field"><span class="label">Where is it?</span>
@@ -526,14 +526,14 @@ function hoodJoin(prefill = "") {
   app.innerHTML = `
     <a class="back" href="#/hoods">‹ Neighborhoods</a>
     <h1>Join with a key</h1>
-    <p class="lede">Enter the invite key from your neighborhood's organizer or a friend who's already in.</p>
+    <p class="lede">Type in the invite key someone sent you.</p>
     <form class="card" id="key-form">
       <label class="field"><span>Invite key</span>
         <input type="text" name="key" value="${esc(prefill)}" required autocomplete="off" autocapitalize="characters"
           placeholder="ABC-123" class="key-input"></label>
       <button class="btn primary block">Join</button>
     </form>
-    <p class="muted">No key? <a href="#/hoods/find">Find a listed neighborhood</a> and ask to join.</p>`;
+    <p class="muted">No key? <a href="#/hoods/find">Find a neighborhood</a> near you and ask to join.</p>`;
   $("#key-form").onsubmit = async (e) => {
     e.preventDefault();
     try {
@@ -556,7 +556,7 @@ async function hoodFind() {
   app.innerHTML = `
     <a class="back" href="#/hoods">‹ Neighborhoods</a>
     <h1>Find a neighborhood</h1>
-    <p class="lede">Listed neighborhoods only. Private ones never show up here. Every one has an organizer who approves new members.</p>
+    <p class="lede">These neighborhoods are open to new people. An organizer still has to let you in.</p>
     <form id="find-form" class="card find-bar">
       <input type="search" name="q" placeholder="Search by name or city" value="${esc(findState.q)}" aria-label="Search">
       <div class="grid2">
@@ -578,7 +578,7 @@ async function hoodFind() {
     const results = await api(`/api/circles/search?${new URLSearchParams(findState)}`);
     $("#results").innerHTML = results.length ? results.map(findCard).join("") : `
       <div class="empty card"><div class="big">🏡</div>
-        <p>No listed neighborhoods match. You could <a href="#/hoods/new">start one</a>.</p></div>`;
+        <p>Nothing matches. Want to <a href="#/hoods/new">start one</a>?</p></div>`;
   };
   form.oninput = () => { clearTimeout(debounce); debounce = setTimeout(run, 200); };
   form.onsubmit = (e) => { e.preventDefault(); run(); };
@@ -776,7 +776,7 @@ function inviteCard(c) {
     <section class="card invite">
       <div class="muted">Invite key</div>
       <div class="key">${esc(c.inviteKey)}</div>
-      <p class="small" style="color:var(--ink-2)">Anyone with this key or link joins right away, no approval needed. Share it with people you know.</p>
+      <p class="small" style="color:var(--ink-2)">Anyone with this key can join right away, so only share it with people you know.</p>
       <div class="actions">
         <button class="btn primary" data-action="share-invite" data-name="${esc(c.name)}" data-key="${esc(c.inviteKey)}">Share invite link</button>
         <button class="btn small" data-action="rotate-key" data-id="${esc(c.id)}">Make a new key</button>
@@ -864,7 +864,7 @@ function organizerSection(c) {
     <h2>Organizer tools</h2>
     <h3 class="subhead">No-show appeals <span class="pill ${pendingAppeals ? "bad" : "good"}">${pendingAppeals} to review</span></h3>
     ${c.appeals.length ? c.appeals.map((a) => appealCard(a, c.id)).join("")
-      : `<p class="muted">Volunteers who were reported as a no-show can appeal with a statement and photos. Appeals show up here.</p>`}
+      : `<p class="muted">If someone gets marked as a no-show and thinks it's wrong, they can appeal. You'll see it here.</p>`}
     <div class="card">
       <div class="row spread"><h3 style="margin:0">Safety reports</h3><span class="pill ${open.length ? "bad" : "good"}">${open.length} open</span></div>
       ${c.reports.length ? c.reports.map((r) => `
@@ -872,7 +872,7 @@ function organizerSection(c) {
           <div class="small"><b>${esc(r.fromName)}</b> · ${ago(r.at)} ${r.resolved ? `<span class="pill good">resolved</span>` : ""}</div>
           <div>${esc(r.note)}</div>
           ${r.resolved ? "" : `<button class="btn small" style="margin-top:6px" data-action="resolve" data-circle="${esc(c.id)}" data-id="${esc(r.id)}">Mark resolved</button>`}
-        </div>`).join("") : `<p class="muted" style="margin:8px 0 0">No reports. Members can report a concern from any task.</p>`}
+        </div>`).join("") : `<p class="muted" style="margin:8px 0 0">No reports yet. Members can report a problem from any task.</p>`}
     </div>
     <div class="card">
       <h3>Members</h3>
@@ -910,7 +910,7 @@ async function board() {
     app.innerHTML = `
       <h1>Volunteer board</h1>
       <div class="empty card"><div class="big">🤝</div>
-        <p>Turn on volunteering to see requests from your neighborhoods, ranked for you.</p>
+        <p>Turn on volunteering to see who needs help near you.</p>
         <a class="btn primary" href="#/me">Set up volunteering</a></div>`;
     return;
   }
@@ -927,14 +927,14 @@ async function board() {
 
   app.innerHTML = `
     <div class="row spread"><h1>Your board</h1><span class="updated">Live · updated just now</span></div>
-    <p class="lede">Open requests from ${multi ? `your ${data.circles} neighborhoods` : esc(activeCircles()[0]?.name ?? "your neighborhood")}, ranked for <b>you</b> by how urgent they are, how close, and how well they fit your skills.</p>
+    <p class="lede">Open requests from ${multi ? `your ${data.circles} neighborhoods` : esc(activeCircles()[0]?.name ?? "your neighborhood")}. The most urgent and closest ones are at the top.</p>
     <div class="legend" style="margin-bottom:14px">
       <span><b class="f-urgency"></b>Urgency ×${WEIGHTS.urgency}</span>
       <span><b class="f-distance"></b>Distance ×${WEIGHTS.distance}</span>
       <span><b class="f-skill"></b>Skill fit ×${WEIGHTS.skill}</span>
     </div>
     ${data.items.length ? data.items.map((item, i) => boardCard(item, i, multi)).join("") : `
-      <div class="empty card"><div class="big">☀️</div><p>Nothing open that fits you right now. New requests show up here as they come in.</p></div>`}
+      <div class="empty card"><div class="big">☀️</div><p>Nothing right now. New requests will show up here.</p></div>`}
     ${hiddenTotal ? `
       <div class="notice small">
         <b>${hiddenTotal} request${hiddenTotal === 1 ? " isn't" : "s aren't"} shown to you:</b>
@@ -955,9 +955,9 @@ function boardCard(item, i, multi) {
   const p = item.parts;
   const contrib = (k) => WEIGHTS[k] * p[k];
   const factors = [
-    ["urgency", "Urgency", "How soon it's needed (halves every 24h of lead time), plus a boost if the person is housebound."],
-    ["distance", "Distance", `1.0 next door, down to 0 at your ${me.person.maxDistanceMiles}-mile limit.`],
-    ["skill", "Skill fit", me.person.anything ? "1.0, because you're up for anything." : "1.0 if it's one of your best skills, 0.3 otherwise. You still see everything; this only changes the order."],
+    ["urgency", "Urgency", "How soon it's needed. It gets a boost if the person can't easily get out."],
+    ["distance", "Distance", `Closer is higher. It drops to 0 at your ${me.person.maxDistanceMiles}-mile limit.`],
+    ["skill", "Skill fit", me.person.anything ? "1.0, because you're up for anything." : "Higher if it's something you're best at. You still see everything, this only changes the order."],
   ];
   return `
     <article class="card fadein rank-${i + 1}">
@@ -995,7 +995,7 @@ function ask() {
   if (!circles.length) {
     app.innerHTML = `
       <h1>Ask for help</h1>
-      <div class="empty card"><div class="big">🏡</div><p>Join a neighborhood first, so your request goes to people you can trust.</p>
+      <div class="empty card"><div class="big">🏡</div><p>Join a neighborhood first, so your request goes to people you know.</p>
         <a class="btn primary" href="#/hoods">Neighborhoods</a></div>`;
     return;
   }
@@ -1003,7 +1003,7 @@ function ask() {
   const later = new Date(now.getTime() + 3 * 864e5);
   app.innerHTML = `
     <h1>Ask for help</h1>
-    <p class="lede">Describe it like you'd text a neighbor. We'll fill in the details; check them before posting.</p>
+    <p class="lede">Type it like you'd text a neighbor. We'll fill in the rest, just double-check it before you post.</p>
     <form id="ask-form">
       <label class="field"><span>What do you need?</span>
         <textarea name="description" id="q" maxlength="280" required placeholder="Need help carrying groceries in Saturday morning, I'm recovering from knee surgery"></textarea></label>
@@ -1025,7 +1025,7 @@ function ask() {
             <option value="">Choose…</option>
             ${Object.entries(SETTINGS).map(([k, label]) => `<option value="${k}">${esc(label)}</option>`).join("")}
           </select>
-          <span class="muted" style="display:block;margin-top:5px;font-weight:400">This decides who can take it. Volunteers under 18 only help at the door or outside.</span></label>
+          <span class="muted" style="display:block;margin-top:5px;font-weight:400">This decides who can take it. Volunteers under 18 can only help at the door or outside.</span></label>
         <div class="grid2">
           <label class="field"><span>Earliest</span><input type="datetime-local" name="start" id="start" value="${toLocalInput(now)}" required></label>
           <label class="field"><span>Latest (deadline)</span><input type="datetime-local" name="end" id="end" value="${toLocalInput(later)}" required></label>
@@ -1042,14 +1042,14 @@ function ask() {
           </div>
         </div>
         <label class="check"><input type="checkbox" name="housebound" id="housebound">
-          <span><span id="housebound-label">I can't easily get out right now</span><br><span class="muted">Moves the request up for volunteers.</span></span></label>
+          <span><span id="housebound-label">I can't easily get out right now</span><br><span class="muted">Puts your request higher on volunteers' lists.</span></span></label>
         <label class="field"><span>🔒 Phone number to reach you (optional)</span>
           <input type="tel" name="contactPhone" maxlength="25" autocomplete="tel" placeholder="(555) 123-4567"></label>
         <label class="field"><span>🔒 Private details (optional)</span>
           <textarea name="privateDetails" maxlength="200" placeholder="Street address, which door, gate code…"></textarea></label>
-        <p class="muted" style="margin-top:-8px">🔒 fields are shown only to the one volunteer who accepts. Everyone else just sees how far away the request is.</p>
+        <p class="muted" style="margin-top:-8px">Only the volunteer who says yes can see the 🔒 fields. Everyone else just sees how far away you are.</p>
       </div>
-      <p class="muted">Neighborly is for everyday practical help. For medical needs or personal care, please contact a professional.</p>
+      <p class="muted">Neighborly is for everyday help. For anything medical, please reach out to a professional.</p>
       <button class="btn primary block" id="post-btn">Post request</button>
     </form>`;
 
@@ -1107,7 +1107,7 @@ function ask() {
           location: f.get("forSomeone") === "on" && f.get("location") ? JSON.parse(f.get("location")) : null,
         },
       });
-      toast("Posted! Want it seen faster? Share it to your group chat.");
+      toast("Posted! Share it in your group chat to get help faster.");
       location.hash = "#/mine";
     } catch (err) {
       toast(err.message, true);
@@ -1196,7 +1196,7 @@ const HELP_STATUS = {
 };
 
 const APPEAL_STATUS = {
-  pending: ["Appeal sent. Waiting for an organizer to review it.", "warn"],
+  pending: ["Appeal sent. An organizer will look at it soon.", "warn"],
   overturned: ["Appeal accepted: the no-show was removed from your record.", "good"],
   upheld: ["Appeal reviewed: the organizer kept the no-show.", "bad"],
 };
@@ -1323,14 +1323,14 @@ async function leaders(circleId, range, sort) {
         <div class="card lb-card"><ol class="lb">${row(lb.me)}</ol></div>` : ""}
     ` : `
       <div class="empty card"><div class="big">🏆</div>
-        <p>Nobody's finished a task here ${leadersRange === "month" ? "this month" : "yet"}. Help a neighbor to get on the board!</p>
+        <p>Nobody's finished a task here ${leadersRange === "month" ? "this month" : "yet"}. Help someone out and you'll be on here!</p>
         <a class="btn primary" href="#/board">See who needs help</a></div>`}
 
     <p class="muted lb-note">
       ${byRel
-        ? "Ranked by reliability score; ties go to whoever completed more tasks."
-        : "Ranked by tasks completed; ties go to the higher reliability score."}
-      Only people who've helped are shown, and only 2 tasks for the same neighbor in a month count, to keep it fair.</p>`;
+        ? "Ranked by reliability. Ties go to whoever did more tasks."
+        : "Ranked by tasks done. Ties go to the higher reliability."}
+      Only people who've helped show up here. To keep it fair, only 2 tasks for the same person count each month.</p>`;
 
   $("#lb-circle")?.addEventListener("change", (e) => (location.hash = link(e.target.value)));
 }
@@ -1371,9 +1371,9 @@ async function profile() {
       <div class="rep-big" style="margin-top:10px"><span class="num">${Math.round(rep.score)}</span><span class="muted">/ 100 · ${rep.completed} tasks completed</span></div>
       ${repBreakdown(rep.parts, nextGain)}
       <p class="small" style="color:var(--ink-2);margin-top:12px">
-        This is what neighbors see when you offer to help, in every neighborhood you're in.
-        Reaching 80 takes a few good tasks; getting past 90 takes many, with no slip-ups.
-        Recent tasks count most: each one's weight halves every 90 days. Missed tasks fade more slowly.
+        This is what neighbors see when you offer to help. Getting to 80 is pretty quick,
+        but getting past 90 takes a lot of tasks with no no-shows.
+        Recent tasks count the most, and older ones slowly fade.
       </p>
       ${events.length ? `
         <ul class="events">
@@ -1399,12 +1399,12 @@ async function profile() {
 
     <form class="card" id="profile-form">
       <label class="check"><input type="checkbox" name="volunteering" ${p.volunteering ? "checked" : ""}>
-        <span><b>I want to volunteer</b><br><span class="muted">Your board will show requests from your neighborhoods that fit you.</span></span></label>
+        <span><b>I want to volunteer</b><br><span class="muted">We'll show you requests nearby that you can help with.</span></span></label>
       ${p.isMinor ? `<div class="notice warn small"><b>Under-18 safety rule:</b> you can help at the door or outside (groceries, yard work, leaves) but not inside someone's home or in a car. Guardian on file: ${esc(p.guardianContact)}</div>` : ""}
       <div class="field"><span class="label">What you're best at</span>
-        <p class="muted" style="margin:-4px 0 10px">You'll still see every request. These just move to the top of your board.</p>
+        <p class="muted" style="margin:-4px 0 10px">You'll still see every request. These just show up first.</p>
         <label class="check"><input type="checkbox" name="anything" id="anything" ${p.anything ? "checked" : ""}>
-          <span><b>I'm up for anything</b><br><span class="muted">Every kind of help counts as a match for you.</span></span></label>
+          <span><b>I'm up for anything</b><br><span class="muted">Every kind of request counts as a match.</span></span></label>
         <div class="chips${p.anything ? " dimmed" : ""}" id="skill-chips">${Object.entries(TASK_TYPES).map(([k, t]) => {
           // "Other" has no fixed setting, so it's never blocked here; each request is still checked.
           const blocked = p.isMinor && t.setting && !MINOR_ALLOWED_SETTINGS.has(t.setting);
@@ -1430,7 +1430,7 @@ async function profile() {
       </div>
       <label class="field"><span>Phone (optional)</span>
         <input type="tel" name="phone" maxlength="25" autocomplete="tel" value="${esc(p.phone ?? "")}" placeholder="(555) 123-4567">
-        <span class="muted" style="display:block;margin-top:5px;font-weight:400">Shared only with neighbors whose request you accept, so they can reach you.${p.isMinor ? " Your guardian's contact is shared with them too." : ""}</span></label>
+        <span class="muted" style="display:block;margin-top:5px;font-weight:400">Only shared with people whose request you accept, so they can reach you.${p.isMinor ? " Your guardian's contact is shared with them too." : ""}</span></label>
       <button class="btn primary block">Save</button>
     </form>
 
@@ -1444,7 +1444,7 @@ async function profile() {
           <input type="password" name="password" required minlength="8" autocomplete="new-password" placeholder="8+ characters"></label>
         <button class="btn block">Change password</button>` : `
         <h3>Add a username and password</h3>
-        <div class="notice warn small">Right now your account only lives in this browser. Add a login so you can use Neighborly on any device, and don't lose it if this browser is cleared.</div>
+        <div class="notice warn small">Right now your account only works in this browser. Add a username and password so you can log in anywhere.</div>
         <div class="grid2">
           <label class="field"><span>Username</span>
             <input type="text" name="username" required minlength="3" maxlength="20" pattern="[A-Za-z0-9_.]{3,20}"
@@ -1464,7 +1464,7 @@ async function profile() {
         method: "PUT",
         body: { username: f.get("username"), password: f.get("password"), currentPassword: f.get("currentPassword") },
       });
-      toast(p.hasPassword ? "Password changed" : "Login saved. You can now log in on any device.");
+      toast(p.hasPassword ? "Password changed" : "Saved! Now you can log in from any device.");
       profile();
     } catch (err) {
       toast(err.message, true);
@@ -1519,17 +1519,17 @@ const actions = {
   },
   async accept(el) {
     await api(`/api/requests/${el.dataset.id}/accept`, { method: "POST" });
-    toast("You're on it! Details are under Mine.");
+    toast("You're on it! Find the details under Mine.");
     location.hash = "#/mine";
   },
   async complete(el) {
     await api(`/api/requests/${el.dataset.id}/complete`, { method: "POST" });
-    toast(`Marked done. Thanks for letting ${el.dataset.name} know it counted!`);
+    toast(`Marked done. ${el.dataset.name} gets credit for it.`);
     await route();
   },
   async noshow(el) {
     const ok = await confirmDialog(`Did ${el.dataset.name} not come?`,
-      "This goes on their reliability record and your request reopens for other volunteers.", "Yes, report no-show", true);
+      "This counts against their reliability, and your request opens back up for other volunteers.", "Yes, report no-show", true);
     if (!ok) return;
     await api(`/api/requests/${el.dataset.id}/noshow`, { method: "POST" });
     toast("Reported. Your request is open again.");
@@ -1539,12 +1539,12 @@ const actions = {
     const hours = (new Date(el.dataset.start) - Date.now()) / 36e5;
     const late = hours < 12;
     const ok = await confirmDialog("Can't make it?",
-      late ? "It's less than 12 hours before the start time, so this will count as a <b>late cancellation</b> on your reliability. The request goes back on the board."
-           : "No problem. You're giving plenty of notice, so this won't affect your reliability. The request goes back on the board.",
+      late ? "It's less than 12 hours before the start, so this counts as a <b>late cancel</b> on your reliability. The request goes back on the board."
+           : "No problem. You gave enough notice, so this won't hurt your reliability. The request goes back on the board.",
       "Release it", late);
     if (!ok) return;
     await api(`/api/requests/${el.dataset.id}/cancel`, { method: "POST" });
-    toast("Released back to the board.");
+    toast("Back on the board.");
     await route();
   },
   async withdraw(el) {
@@ -1555,7 +1555,7 @@ const actions = {
   report(el) {
     openDialog(`
       <h3>Report a concern</h3>
-      <p class="small">This goes privately to the neighborhood's organizers. If anyone is in danger, call 911 first.</p>
+      <p class="small">Only your neighborhood's organizers will see this. If anyone is in danger, call 911 first.</p>
       <form><label class="field"><span>What happened?</span><textarea name="note" maxlength="500" required></textarea></label>
       <div class="actions"><button class="btn primary">Send to organizer</button><button class="btn" type="button" data-close>Cancel</button></div></form>`,
       async (f) => {
@@ -1566,7 +1566,7 @@ const actions = {
   "ask-join"(el) {
     openDialog(`
       <h3>Ask to join ${esc(el.dataset.name)}</h3>
-      <p class="small">An organizer will see your name and this note, and decide whether to let you in.</p>
+      <p class="small">An organizer will see your name and note and decide whether to let you in.</p>
       <form><label class="field"><span>Say who you are (optional)</span>
         <textarea name="note" maxlength="200" placeholder="e.g. I live on Birch Ct, two houses down from the park."></textarea></label>
       <div class="actions"><button class="btn primary">Send request</button><button class="btn" type="button" data-close>Cancel</button></div></form>`,
@@ -1594,7 +1594,7 @@ const actions = {
     openDialog(`
       <h3>Appeal this no-show</h3>
       <p class="small">${esc(el.dataset.name)} reported that you didn't come for "${esc(el.dataset.desc)}".
-        Tell the organizer what happened. They'll decide, and if they agree, the 15-point penalty is removed.</p>
+        Tell the organizer what happened. If they agree with you, the 15-point penalty comes off.</p>
       <form>
         <label class="field"><span>What happened?</span>
           <textarea name="statement" maxlength="1000" minlength="20" required
@@ -1603,8 +1603,8 @@ const actions = {
           <label class="btn small" style="cursor:pointer">📷 Add photos
             <input type="file" accept="image/*" multiple id="appeal-files" hidden></label>
           <div class="appeal-thumbs" id="appeal-thumbs"></div>
-          <p class="muted" style="margin:6px 0 0">e.g. a photo at the door or a screenshot of your texts. Location data is removed from photos before upload.
-            Only this neighborhood's organizers will see them.</p>
+          <p class="muted" style="margin:6px 0 0">Like a photo at the door or a screenshot of your texts. We remove location data from photos,
+            and only your organizers can see them.</p>
         </div>
         <div class="actions"><button class="btn primary">Send appeal</button><button class="btn" type="button" data-close>Cancel</button></div>
       </form>`,
@@ -1652,7 +1652,7 @@ const actions = {
       decision === "overturn" ? "Remove this no-show?" : "Keep this no-show?",
       decision === "overturn"
         ? "The 15-point penalty comes off their reliability score right away."
-        : "The penalty stays. They'll see your note, if you wrote one.",
+        : "The penalty stays. They'll see your note if you wrote one.",
       decision === "overturn" ? "Remove it" : "Keep it");
     if (!ok) return;
     await api(`/api/appeals/${id}/decide`, { method: "POST", body: { decision, note } });
@@ -1669,7 +1669,7 @@ const actions = {
   },
   async "rotate-key"(el) {
     const ok = await confirmDialog("Make a new invite key?",
-      "The old key and link stop working right away. People already in the neighborhood stay in.", "Make new key");
+      "The old key and link stop working right away. People already in stay in.", "Make new key");
     if (!ok) return;
     await api(`/api/circles/${el.dataset.id}/key`, { method: "POST" });
     toast("New key ready.");
@@ -1679,7 +1679,7 @@ const actions = {
     const { decision, circle, id, name } = el.dataset;
     if (decision === "remove") {
       const ok = await confirmDialog(`Remove ${name}?`,
-        "They lose access to this neighborhood right away. Their open requests here are withdrawn and any tasks they accepted here go back on the board.", "Remove", true);
+        "They lose access to this neighborhood right away. Their open requests here get canceled, and anything they signed up to help with goes back on the board.", "Remove", true);
       if (!ok) return;
     }
     if (decision === "organizer") {
@@ -1693,7 +1693,7 @@ const actions = {
   },
   async leave(el) {
     const ok = await confirmDialog(`Leave ${el.dataset.name}?`,
-      "Your open requests there are withdrawn and tasks you accepted there go back on the board. Your reliability stays with you.", "Leave", true);
+      "Your open requests there get canceled, and tasks you signed up for go back on the board. Your reliability stays with you.", "Leave", true);
     if (!ok) return;
     await api(`/api/circles/${el.dataset.id}/leave`, { method: "POST" });
     await refreshMe();
