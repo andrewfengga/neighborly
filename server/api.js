@@ -118,6 +118,7 @@ function toVolunteer(db, person, now) {
     isMinor: person.isMinor,
     guardianContact: person.guardianContact,
     skills: person.skills,
+    anything: Boolean(person.anything),
     availability: expandSlots(person.slots, now),
     maxDistanceMiles: person.maxDistanceMiles,
     history: person.history.map((e) => ({ ...e, at: new Date(e.at) })),
@@ -277,7 +278,8 @@ export function updateProfile(db, person, body) {
   if (volunteering && !location) fail("Set your location so we can show requests near you");
   const phone = body.phone !== undefined ? phoneField(body.phone, "Phone") : person.phone ?? "";
 
-  Object.assign(person, { volunteering, skills, slots, maxDistanceMiles: miles, location, phone });
+  const anything = body.anything !== undefined ? Boolean(body.anything) : Boolean(person.anything);
+  Object.assign(person, { volunteering, skills, anything, slots, maxDistanceMiles: miles, location, phone });
   return { ok: true };
 }
 

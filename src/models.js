@@ -74,6 +74,7 @@ export function createVolunteer({
   skills = [],
   availability = [],
   maxDistanceMiles = 3,
+  anything = false, // "I'm up for anything": every kind of help counts as a skill match
   history = [],
 }) {
   if (isMinor && !guardianContact) {
@@ -92,6 +93,7 @@ export function createVolunteer({
     skills: new Set(skills),
     availability,
     maxDistanceMiles,
+    anything,
     history, // past outcomes; see reputation.js
   };
 }

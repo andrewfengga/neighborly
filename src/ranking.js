@@ -68,8 +68,13 @@ export function distanceScore(miles, maxMiles) {
   return Math.max(0, 1 - miles / maxMiles);
 }
 
-/** Full credit for a listed skill; partial credit so willing helpers still see other tasks. */
+/**
+ * Skills only change the order, never what you can see: full credit for a
+ * listed skill (or for everything, if you're up for anything), partial
+ * credit otherwise.
+ */
 export function skillScore(volunteer, request) {
+  if (volunteer.anything) return 1;
   return volunteer.skills.has(request.taskType) ? 1 : 0.3;
 }
 
@@ -88,12 +93,12 @@ export function scoreRequest(volunteer, request, miles, now = new Date()) {
 }
 
 /** Human-readable reason, e.g. for the "why am I seeing this?" line in the UI. */
-export function explain(request, scored, now = new Date()) {
+export function explain(request, scored, now = new Date(), volunteer = null) {
   const hoursLeft = Math.round((request.window.end - now) / HOUR_MS);
   const bits = [
     hoursLeft <= 36 ? `needed within ${hoursLeft}h` : `due in ${Math.round(hoursLeft / 24)} days`,
     scored.miles < 0.1 ? "right nearby" : `${scored.miles.toFixed(1)} mi away`,
-    scored.parts.skill === 1 ? "matches your skills" : "outside your listed skills",
+    volunteer?.anything ? "you're up for anything" : scored.parts.skill === 1 ? "one of your best skills" : "not one of your top skills",
   ];
   if (request.housebound) bits.unshift("requester is housebound");
   return bits.join(" · ");
@@ -106,7 +111,7 @@ export function rankForVolunteer(volunteer, requests, now = new Date()) {
     const check = checkEligibility(volunteer, request, now);
     if (!check.ok) continue;
     const scored = scoreRequest(volunteer, request, check.miles, now);
-    ranked.push({ request, ...scored, why: explain(request, scored, now) });
+    ranked.push({ request, ...scored, why: explain(request, scored, now, volunteer) });
   }
   return ranked.sort((a, b) => b.total - a.total);
 }

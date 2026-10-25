@@ -913,7 +913,7 @@ function boardCard(item, i, multi) {
   const factors = [
     ["urgency", "Urgency", "How soon it's needed (halves every 24h of lead time), plus a boost if the person is housebound."],
     ["distance", "Distance", `1.0 next door, down to 0 at your ${me.person.maxDistanceMiles}-mile limit.`],
-    ["skill", "Skill fit", "1.0 if it's one of your skills, 0.3 otherwise, so willing helpers still see it."],
+    ["skill", "Skill fit", me.person.anything ? "1.0, because you're up for anything." : "1.0 if it's one of your best skills, 0.3 otherwise. You still see everything; this only changes the order."],
   ];
   return `
     <article class="card fadein rank-${i + 1}">
@@ -1357,8 +1357,11 @@ async function profile() {
       <label class="check"><input type="checkbox" name="volunteering" ${p.volunteering ? "checked" : ""}>
         <span><b>I want to volunteer</b><br><span class="muted">Your board will show requests from your neighborhoods that fit you.</span></span></label>
       ${p.isMinor ? `<div class="notice warn small"><b>Under-18 safety rule:</b> you can help at the door or outside (groceries, yard work, leaves) but not inside someone's home or in a car. Guardian on file: ${esc(p.guardianContact)}</div>` : ""}
-      <div class="field"><span class="label">What you're happy to do</span>
-        <div class="chips">${Object.entries(TASK_TYPES).map(([k, t]) => {
+      <div class="field"><span class="label">What you're best at</span>
+        <p class="muted" style="margin:-4px 0 10px">You'll still see every request. These just move to the top of your board.</p>
+        <label class="check"><input type="checkbox" name="anything" id="anything" ${p.anything ? "checked" : ""}>
+          <span><b>I'm up for anything</b><br><span class="muted">Every kind of help counts as a match for you.</span></span></label>
+        <div class="chips${p.anything ? " dimmed" : ""}" id="skill-chips">${Object.entries(TASK_TYPES).map(([k, t]) => {
           // "Other" has no fixed setting, so it's never blocked here; each request is still checked.
           const blocked = p.isMinor && t.setting && !MINOR_ALLOWED_SETTINGS.has(t.setting);
           return `<label class="chip"><input type="checkbox" name="skills" value="${k}" ${p.skills.includes(k) ? "checked" : ""} ${blocked ? "disabled" : ""}><span>${esc(t.label)}</span></label>`;
@@ -1397,6 +1400,7 @@ async function profile() {
 
   const form = $("#profile-form");
   form.maxDistanceMiles.oninput = (e) => ($("#miles-out").textContent = e.target.value);
+  $("#anything").onchange = (e) => $("#skill-chips").classList.toggle("dimmed", e.target.checked);
   $("#update-loc").onclick = async () => {
     try {
       await api("/api/me", { method: "PUT", body: { location: await getRoundedLocation() } });
@@ -1415,6 +1419,7 @@ async function profile() {
         body: {
           volunteering: f.get("volunteering") === "on",
           skills: f.getAll("skills"),
+          anything: f.get("anything") === "on",
           slots: f.getAll("slots"),
           maxDistanceMiles: Number(f.get("maxDistanceMiles")),
           phone: f.get("phone"),

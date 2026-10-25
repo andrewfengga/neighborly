@@ -465,3 +465,4 @@ dialog::backdrop { background: rgb(0 0 0 / .4); }
 .slot-group { display: grid; grid-template-columns: 82px 1fr; gap: 10px; align-items: start; margin-bottom: 10px; }
 .slot-group-label { font-size: 13px; font-weight: 600; color: var(--ink-3); padding-top: 9px; }
 @media (max-width: 420px) { .slot-group { grid-template-columns: 1fr; gap: 6px; } .slot-group-label { padding-top: 0; } }
+.chips.dimmed { opacity: .45; }

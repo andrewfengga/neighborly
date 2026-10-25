@@ -162,3 +162,14 @@ test("completing a task records who asked, so the cap can apply", () => {
   completeRequest(acceptRequest(v, request(), now), v, { confirmedBy: "r" }, now);
   assert.equal(v.history[0].requesterId, "r");
 });
+
+test("skills only change the order; 'up for anything' gives full skill credit", async () => {
+  const { rankForVolunteer, skillScore } = await import("../src/ranking.js");
+  const picky = volunteer({ skills: ["groceries"] });
+  const open = volunteer({ skills: [], anything: true });
+  const r = request({ taskType: "yard_work" });
+  assert.equal(skillScore(picky, r), 0.3);
+  assert.equal(skillScore(open, r), 1);
+  assert.equal(rankForVolunteer(picky, [r], now).length, 1, "non-skill requests are still shown");
+  assert.match(rankForVolunteer(open, [r], now)[0].why, /up for anything/);
+});
