@@ -1368,7 +1368,7 @@ async function profile() {
 
     <section class="card">
       <div class="row spread"><h3 style="margin:0">Reliability</h3><span class="pill ${rep.label === "Mixed history" ? "warn" : "brand"}">${esc(rep.label)}</span></div>
-      <div class="rep-big" style="margin-top:10px"><span class="num">${Math.round(rep.score)}</span><span class="muted">/ 100 · ${rep.completed} tasks completed</span></div>
+      <div class="rep-big" style="margin-top:10px"><span class="num">${Math.round(rep.score)}</span><span class="muted">/ 100 · ${rep.completed} task${rep.completed === 1 ? "" : "s"} completed</span></div>
       ${repBreakdown(rep.parts, nextGain)}
       <p class="small" style="color:var(--ink-2);margin-top:12px">
         This is what neighbors see when you offer to help. Getting to 80 is pretty quick,
